@@ -28,9 +28,6 @@
 #define	QUEST_TYPE		quest_daily
 #define	QUEST_JOBID		81
 
-#define	METRO_PAIX		80
-#define METRO_STATION	81
-#define METRO_INNO		82
 #define MAX_ZONES		310
 
 public Plugin myinfo = {
@@ -92,6 +89,9 @@ public void Q1_Start(int objectiveID, int client) {
 	g_iDuration[client] = 12 * 60;
 	g_iStep[client] = 0;
 	g_iDoing[client] = objectiveID;
+	for (int i = 0; i < MAX_ZONES; i++)
+		g_iDoneDistrib[client][i] = 1;
+	
 	g_iDoneDistrib[client][METRO_STATION] = g_iDoneDistrib[client][METRO_PAIX] = g_iDoneDistrib[client][METRO_INNO] = 0;
 	rp_HookEvent(client, RP_PostPiedBiche, fwdPiedDeBiche);
 }
@@ -115,7 +115,7 @@ public void Q2_End(int objectiveID, int client) {
 	
 	int cap = rp_GetRandomCapital(81);
 	rp_SetJobCapital(cap, rp_GetJobCapital(cap) - 1250);
-	rp_SetClientInt(client, i_AddToPay, rp_GetClientInt(client, i_AddToPay) + 1250);
+	rp_ClientMoney(client, i_AddToPay, 1250);
 	
 	rp_ClientXPIncrement(client, 500);
 }

@@ -223,7 +223,7 @@ public void Q3_Frame(int objectiveID, int client) {
 	
 	if( GetVectorDistance(target, origin) < 64.0 ) {
 		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez reçu 2500$.");
-		rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money)+ 2500);
+		rp_ClientMoney(client, i_Money, 2500);
 		rp_QuestStepComplete(client, objectiveID);
 	}
 	else {
@@ -349,7 +349,7 @@ public void Q7_Frame(int objectiveID, int client) {
 		DrawPanelText(panel, "votre paye. Lorsque vous aurez décroché");
 		DrawPanelText(panel, "votre premier emploi, il est généralement");
 		DrawPanelText(panel, "conseillé de louer un appart. Celui-ci");
-		DrawPanelText(panel, "augmentera votre paie et vous rend votre vie.");
+		DrawPanelText(panel, "vous donne de l'énergie et vous rend votre vie.");
 		DrawPanelText(panel, "Vous pouvez aussi y cacher différents objets");
 		DrawPanelText(panel, "du jeu, tel que les machines à faux-billets");
 		DrawPanelText(panel, "plants de drogue, armes, etc.");
@@ -427,7 +427,7 @@ public void Q9_Frame(int objectiveID, int client) {
 		DrawPanelText(panel, "avec les citoyens à coté de vous.");
 		DrawPanelText(panel, " ");
 		DrawPanelText(panel, "→ Faites un coucou dans le chat local");
-		DrawPanelText(panel, "(chat équipe) afin de continuer votre");
+		DrawPanelText(panel, "(Touche u) afin de continuer votre");
 		DrawPanelText(panel, "apprentissage.");
 		
 		rp_SendPanelToClient(panel, client, 1.1);
@@ -673,7 +673,7 @@ public int MenuSelectParrain(Handle menu, MenuAction action, int client, int par
 		}
 		
 		rp_QuestStepComplete(client, g_iQ12);
-		rp_SetClientInt(client, i_Bank, rp_GetClientInt(client, i_Bank) + 7500);
+		rp_ClientMoney(client, i_Bank, 7500);
 		
 		
 	}
@@ -744,7 +744,7 @@ public int MenuSelectJob(Handle menu, MenuAction action, int client, int param2)
 			rp_SetClientInt(client, i_Tutorial, 20);
 			rp_ClientGiveItem(client, 223);
 			rp_QuestStepComplete(client, g_iQ14);
-			rp_SetClientInt(client, i_Bank, rp_GetClientInt(client, i_Bank) + 15000);
+			rp_ClientMoney(client, i_Bank, 15000);
 			
 			rp_ClientXPIncrement(client, 5000);
 			

@@ -17,24 +17,25 @@
 #include <smlib>		// https://github.com/bcserv/smlib
 #include <emitsoundany> // https://forums.alliedmods.net/showthread.php?t=237045
 
+
+
 #pragma newdecls required
 #include <roleplay.inc>	// https://www.ts-x.eu
 
 //#define DEBUG
-#define QUEST_UNIQID	"dealer-004"
-#define	QUEST_NAME		"Razzia"
+#define QUEST_UNIQID	"justice-004"
+#define	QUEST_NAME		"Acte de présence"
 #define	QUEST_TYPE		quest_daily
-#define	QUEST_JOBID		81
-#define	QUEST_RESUME	""
-
+#define	QUEST_JOBID		101
+#define	QUEST_RESUME1	"Patienter dans le Tribunal"
 
 public Plugin myinfo = {
 	name = "Quête: "...QUEST_NAME, author = "KoSSoLaX",
-	description = "RolePlay - Quête Dealer: "...QUEST_NAME,
+	description = "RolePlay - Quête justice: "...QUEST_NAME,
 	version = __LAST_REV__, url = "https://www.ts-x.eu"
 };
 
-int g_iQuest, g_iDoing[MAXPLAYERS + 1], g_iDuration[MAXPLAYERS + 1], g_iCount[MAXPLAYERS + 1];
+int g_iQuest, g_iDuration[MAXPLAYERS + 1];
 
 public void OnPluginStart() {
 	RegServerCmd("rp_quest_reload", Cmd_Reload);
@@ -45,8 +46,7 @@ public void OnAllPluginsLoaded() {
 		SetFailState("Erreur lors de la création de la quête %s %s", QUEST_UNIQID, QUEST_NAME);
 	
 	int i;
-	rp_QuestAddStep(g_iQuest, i++,	Q1_Start,	Q1_Frame,	Q1_Abort,	Q1_Done);
-	
+	rp_QuestAddStep(g_iQuest, i++,	Q1_Start,	Q1_Frame,	Q1_Abort,	Q1_Abort);	
 }
 public Action Cmd_Reload(int args) {
 	char name[64];
@@ -59,85 +59,65 @@ public bool fwdCanStart(int client) {
 	if( rp_GetClientJobID(client) != QUEST_JOBID )
 		return false;
 	
-	int count = 0;
-	char tmp[64];
-	for (int i = MaxClients; i < 2048; i++) {
-		if( !IsValidEdict(i) || !IsValidEntity(i) )
+	for (int i = 1; i <= MaxClients; i++) {
+		if( !IsValidClient(i) )
 			continue;
-		
-		GetEdictClassname(i, tmp, sizeof(tmp));
-		
-		if( StrContains(tmp, "weapon_") == 0 && !StrEqual(tmp, "weapon_knife") ) {
-			count++;
-		}
-		
-		
+		if( rp_GetClientJobID(i) != QUEST_JOBID )
+			continue;
+		if( zoneJail(i) )
+			return false;
 	}
-	
-	return (count>=10);
+	return true;
 }
 public void Q1_Start(int objectiveID, int client) {
 	Menu menu = new Menu(MenuNothing);
 	
 	menu.SetTitle("Quète: %s", QUEST_NAME);
 	menu.AddItem("", "Interlocuteur anonyme :", ITEMDRAW_DISABLED);
-	menu.AddItem("", "Hey gros, il est temps d'éliminer la concurance", ITEMDRAW_DISABLED);
+	menu.AddItem("", "Collègue, nous avons besoin que vous", ITEMDRAW_DISABLED);
+	menu.AddItem("", "attendez des plaintes dans le Tribunal. Pendant les", ITEMDRAW_DISABLED);
+	menu.AddItem("", "prochaine 48h nous t'offrons 15$ toutes les 10", ITEMDRAW_DISABLED);
+	menu.AddItem("", "minutes passées à patienter dans le tribunal.", ITEMDRAW_DISABLED);
 	menu.AddItem("", "-----------------", ITEMDRAW_DISABLED);
-	menu.AddItem("", "Tu as 12 heures pour voler le marché d'arme", ITEMDRAW_DISABLED);
-	menu.AddItem("", "de la police, ou de voler le marché noire", ITEMDRAW_DISABLED);
-	menu.AddItem("", "de la mafia ou encore de revendre des armes", ITEMDRAW_DISABLED);
-	menu.AddItem("", "au marché noire des dealers.", ITEMDRAW_DISABLED);
+	menu.AddItem("", "Attention, si tu t'absentes nous t'infligerons", ITEMDRAW_DISABLED);
+	menu.AddItem("", "une retenue sur ton salaire !", ITEMDRAW_DISABLED); 
 	
 	menu.ExitButton = false;
 	menu.Display(client, 60);
 	
-	g_iDuration[client] = 12 * 60;
-	g_iDoing[client] = true;
-	rp_SetClientInt(client, i_Disposed, rp_GetClientInt(client, i_Disposed) + 1);
-	rp_HookEvent(client, RP_OnResellWeapon, fwdResellWeapon);
-	rp_HookEvent(client, RP_OnBlackMarket, fwdBlackMarket);
+	g_iDuration[client] = 48 * 60;
 }
 public void Q1_Frame(int objectiveID, int client) {
+	
+	static bool wasAFK[65];
 	g_iDuration[client]--;
 	
-	if( g_iDuration[client] <= 0 ) {
-		rp_QuestStepFail(client, objectiveID);
+	if( zoneJail(client) ) {
+		
+		if( wasAFK[client] == false && rp_GetClientBool(client, b_IsAFK) ) {
+			int mnt = RoundToFloor(2.5 * 3.0 * 60.0);
+			rp_SetJobCapital(QUEST_JOBID, rp_GetJobCapital(QUEST_JOBID) + mnt);
+			rp_ClientMoney(client, i_AddToPay, - mnt);
+		}
+		
+		wasAFK[client] = rp_GetClientBool(client, b_IsAFK);
+		if( !wasAFK[client] ) {
+			int cap = rp_GetRandomCapital(QUEST_JOBID);
+			int mnt = Math_GetRandomInt(1, 2);
+			rp_SetJobCapital(cap, rp_GetJobCapital(cap) - mnt);
+			rp_ClientMoney(client, i_AddToPay, mnt);
+		}
 	}
-	else if( g_iCount[client] >= 10 ) {
+	
+	if( g_iDuration[client] <= 0 ) {
 		rp_QuestStepComplete(client, objectiveID);
 	}
 	else {
-		PrintHintText(client, "<b>Quête</b>: %s\n<b>Temps restant</b>: %dsec\n<b>Objectif</b>: %s %d/10", QUEST_NAME, g_iDuration[client], QUEST_RESUME, g_iCount[client]);
+		PrintHintText(client, "<b>Quête</b>: %s\n<b>Temps restant</b>: %dsec\n<b>Objectif</b>: %s", QUEST_NAME, g_iDuration[client], QUEST_RESUME1);
 	}
 }
 public void Q1_Abort(int objectiveID, int client) {
 	PrintHintText(client, "<b>Quête</b>: %s\nLa quête est terminée.", QUEST_NAME);
-	g_iDoing[client] = false;
-	
-	rp_UnhookEvent(client, RP_OnResellWeapon, fwdResellWeapon);
-	rp_UnhookEvent(client, RP_OnBlackMarket, fwdBlackMarket);
-}
-
-public Action fwdResellWeapon(int client, int weaponID, int realPrice) {
-	int cap = rp_GetRandomCapital(QUEST_JOBID);
-	rp_SetJobCapital(cap, rp_GetJobCapital(cap) - realPrice);
-	rp_ClientMoney(client, i_AddToPay, realPrice);
-	rp_SetClientInt(client, i_Disposed, rp_GetClientInt(client, i_Disposed) + 1);
-	g_iCount[client]++;
-}
-
-public Action fwdBlackMarket(int client, int jobID, int target, int victim, int& prix, int arg) {
-	if( prix == 0 ) {
-		if( jobID == 1 || (jobID == 91 && victim != client ) ) {
-			int cap = rp_GetRandomCapital(QUEST_JOBID);
-			rp_SetJobCapital(cap, rp_GetJobCapital(cap) - arg);
-			rp_ClientMoney(client, i_AddToPay, arg);
-			g_iCount[client]++;
-		}
-	}
-}
-public void Q1_Done(int objectiveID, int client) {
-	Q1_Abort(objectiveID, client);
 }
 // ----------------------------------------------------------------------------
 public int MenuNothing(Handle menu, MenuAction action, int client, int param2) {
@@ -149,4 +129,10 @@ public int MenuNothing(Handle menu, MenuAction action, int client, int param2) {
 		if( menu != INVALID_HANDLE )
 			CloseHandle(menu);
 	}
+}
+bool zoneJail(int client) {
+	int zone = rp_GetPlayerZone(client);
+	if( zone == TRIBUNAL_1 || zone == TRIBUNAL_2 )
+		return true;
+	return false;
 }

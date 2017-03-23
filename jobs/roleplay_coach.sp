@@ -29,7 +29,7 @@ char g_szSkinsList[][][] = {
 	{"models/player/custom_player/legacy/lara/lara.mdl", 				"Lara", 			"1", "5"},
 	{"models/player/custom_player/legacy/swagirl/swagirl.mdl", 			"Désirée",			"1", "5"},
 	{"models/player/custom_player/legacy/eva/eva.mdl", 					"Eva", 				"1", "5"},
-	{"models/player/custom/zoey/zoey.mdl", 								"Zoey", 			"1", "5"},
+	{"models/player/custom_player/legacy/zoey/zoey.mdl", 				"Zoey", 			"1", "5"},
 	{"models/player/custom_player/legacy/misty/misty.mdl", 				"Misty", 			"1", "5"},
 	
 	{"models/player/custom_player/legacy/redfield/redfield.mdl",		"Redfield",			"0", "5"},
@@ -39,9 +39,9 @@ char g_szSkinsList[][][] = {
 	{"models/player/custom_player/legacy/lloyd/lloyd.mdl", 				"Loyd", 			"0", "5"},
 	{"models/player/custom_player/legacy/bzsoap/bzsoap.mdl", 			"BZ-Soap", 			"0", "5"},
 	{"models/player/custom_player/legacy/leon/leon.mdl", 				"Leon", 			"0", "5"},
-	{"models/player/custom/hitman/hitman.mdl", 							"Hitman", 			"0", "5"},
-	{"models/player/custom_player/legacy/duke/duke_v3.mdl", 			"Duke Nukem", 		"0", "5"},
-	{"models/player/custom/nick/nick.mdl", 								"Nick", 			"0", "5"},
+	{"models/player/custom_player/legacy/hitman/hitman.mdl", 			"Hitman", 			"0", "5"},
+	{"models/player/custom_player/legacy/duke2/duke2.mdl", 				"Duke Nukem", 		"0", "5"},
+	{"models/player/custom_player/legacy/nick/nick.mdl", 				"Nick", 			"0", "5"},
 	
 	{"models/player/custom_player/legacy/tm_anarchist.mdl", 			"Anarchist", 		"0", "1"},
 	{"models/player/custom_player/legacy/tm_anarchist_varianta.mdl", 	"Anarchist - A", 	"0", "1"},
@@ -127,11 +127,40 @@ public void OnClientPostAdminCheck(int client) {
 	rp_HookEvent(client, RP_PostTakeDamageKnife, fwdWeapon);
 	rp_HookEvent(client, RP_OnPlayerBuild, fwdOnPlayerBuild);
 	rp_HookEvent(client, RP_OnPlayerUse, fwdUse);
+	rp_HookEvent(client, RP_OnPlayerCommand, fwdCommand);
+	
 	if( rp_GetClientBool(client, b_Crayon) )
 		rp_HookEvent(client, RP_PrePlayerTalk, fwdTalkCrayon);
+	if( rp_GetClientBool(client, b_HasShoes) )
+		SDKHook(client, SDKHook_OnTakeDamage, fwdNoFallDamage);
 }
 public void OnClientDisconnect(int client) {
 	removeShield(client);
+}
+public Action fwdCommand(int client, char[] command, char[] arg) {
+	if( StrContains(command, "cutinfo") == 0 ) {
+		return Cmd_CutInfo(client);
+	}
+	return Plugin_Continue;
+}
+public Action Cmd_CutInfo(int client) {
+	
+	if( rp_GetClientJobID(client) != 71 ) {
+		ACCESS_DENIED(client);
+	}
+	
+	int target = rp_GetClientTarget(client);
+	
+	if( !IsValidClient(target) )
+		target = client;
+
+	if( !IsPlayerAlive(target) )
+		return Plugin_Handled;
+	
+	CPrintToChat(client, "{lightblue}[TSX-RP]{default} %N a %i%% d'entrainnement au couteau,  %i%% d'esquive et %i%% de précision de tir.", target,
+	rp_GetClientInt(target, i_KnifeTrain), rp_GetClientInt(target, i_Esquive), RoundToFloor(rp_GetClientFloat(target, fl_WeaponTrain)/5.0*100.0));
+	
+	return Plugin_Handled;
 }
 // ----------------------------------------------------------------------------
 public Action Cmd_ItemPackEquipement(int args){
@@ -353,7 +382,11 @@ public Action Cmd_ItemKnifeType(int args) {
 	return Plugin_Handled;
 }
 public Action fwdWeapon(int victim, int attacker, float &damage) {
-	bool changed = wpnCutDamage(victim, attacker, damage);
+	
+	bool changed;
+	
+	if( rp_GetClientBool(attacker, b_GameModePassive) == false)
+		changed = wpnCutDamage(victim, attacker, damage);
 	
 	if( changed )
 		return Plugin_Changed;
@@ -431,13 +464,11 @@ public Action Cmd_ItemPermiTir(int args) {
 	#if defined DEBUG
 	PrintToServer("Cmd_ItemPermiTir");
 	#endif
-	
+
 	int client = GetCmdArgInt(1);
 	
 	float train = rp_GetClientFloat(client, fl_WeaponTrain) + 4.0;
-	train = Math_Clamp(train, 0.0, 8.0);
-	
-	rp_SetClientFloat(client, fl_WeaponTrain, train);
+	rp_SetClientFloat(client, fl_WeaponTrain, train < 8.0 ? train : 8.0);
 	
 	
 	CPrintToChat(client, "{lightblue}[TSX-RP]{default} Votre entraînement est maintenant de %.2f%%", (train/5.0*100.0));
@@ -736,7 +767,7 @@ public int ModifyWeapon(Handle p_hItemMenu, MenuAction p_oAction, int client, in
 			if(StrEqual(szMenuItem, "full")){
 				price = (100 - rp_GetClientInt(client, i_KnifeTrain))*10;
 				if((rp_GetClientInt(client, i_Bank)+rp_GetClientInt(client, i_Money)) >= price){
-					rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money)-price);
+					rp_ClientMoney(client, i_Money, -price);
 					CPrintToChat(client, "{lightblue}[TSX-RP]{default} Votre entrainement au couteau est maintenant maximal.");
 					rp_SetClientInt(client, i_KnifeTrain, 100);
 				}
@@ -748,7 +779,7 @@ public int ModifyWeapon(Handle p_hItemMenu, MenuAction p_oAction, int client, in
 			else if(StrEqual(szMenuItem, "esquive")){
 				price = (100 - rp_GetClientInt(client, i_Esquive))*10;
 				if((rp_GetClientInt(client, i_Bank)+rp_GetClientInt(client, i_Money)) >= price){
-					rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money)-price);
+					rp_ClientMoney(client, i_Money, -price);
 					CPrintToChat(client, "{lightblue}[TSX-RP]{default} Votre esquive est maintenant maximale.");
 					rp_SetClientInt(client, i_Esquive, 100);
 				}
@@ -758,7 +789,7 @@ public int ModifyWeapon(Handle p_hItemMenu, MenuAction p_oAction, int client, in
 				}
 			}
 			else if((rp_GetClientInt(client, i_Bank)+rp_GetClientInt(client, i_Money)) >= price){
-				rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money)-price);
+				rp_ClientMoney(client, i_Money, -price);
 				CPrintToChat(client, "{lightblue}[TSX-RP]{default} La modification à été appliquée à votre couteau.");
 				if(StrEqual(szMenuItem, "fire")){
 					rp_SetClientKnifeType(client, ball_type_fire);
@@ -778,9 +809,7 @@ public int ModifyWeapon(Handle p_hItemMenu, MenuAction p_oAction, int client, in
 				else if(StrEqual(szMenuItem, "precision")) {
 	
 					float train = rp_GetClientFloat(client, fl_WeaponTrain) + 4.0;
-					train = Math_Clamp(train, 0.0, 8.0);
-					
-					rp_SetClientFloat(client, fl_WeaponTrain, train);
+					rp_SetClientFloat(client, fl_WeaponTrain, train < 8.0 ? train : 8.0);
 					
 					CPrintToChat(client, "{lightblue}[TSX-RP]{default} Votre entraînement est maintenant de %.2f%%", (train/5.0*100.0));
 				}

@@ -48,12 +48,17 @@ void HDV_Main(int client) {
 		}
 	}
 	
+	if(!(rp_GetClientBool(client, b_HaveAccount))) {
+		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous devez posséder une clé de coffre pour accéder à l'HDV.");
+		return;
+	}
+	
 	Menu menu = CreateMenu(Handler_MainHDV);
 	menu.SetTitle("Hotel des ventes\n ");
 	menu.AddItem("sell", "Vendre", rp_GetClientInt(client, i_ItemCount) > 0 ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
 	menu.AddItem("buy", "Acheter");
 	menu.AddItem("history", "Votre historique");
-	
+
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 void HDV_Sell(int client, int itemID, int quantity, int sellPrice, int confirm) {
@@ -84,7 +89,7 @@ void HDV_Sell(int client, int itemID, int quantity, int sellPrice, int confirm) 
 		
 		quantity = rp_GetClientItem(client, itemID);
 		rp_GetItemData(itemID, item_type_name, tmp3, sizeof(tmp3));
-		menu.SetTitle("Hotel des ventes: Vendre\nCombien voulez-vous vendre de\n%s?\n ", tmp3);
+		menu.SetTitle("Hôtel des ventes: Vendre\nCombien voulez-vous vendre de\n%s?\n ", tmp3);
 		
 		
 		for (int i = 1; i <= quantity; i++) {
@@ -105,7 +110,7 @@ void HDV_Sell(int client, int itemID, int quantity, int sellPrice, int confirm) 
 		int step = RoundToCeil(rp_GetItemFloat(itemID, item_type_prix) * 0.01);
 		int lastp = 0;
 		
-		menu.SetTitle("Hotel des ventes: Vendre\nA quel prix voulez-vous vendre\n%d %s?\n ", quantity, tmp3);
+		menu.SetTitle("Hôtel des ventes: Vendre\nA quel prix voulez-vous vendre\n%d %s?\n ", quantity, tmp3);
 		for (int p = maxPrice; p >= minPrice; p -= step) {
 			if(lastp == p)
 				continue;
@@ -128,7 +133,7 @@ void HDV_Sell(int client, int itemID, int quantity, int sellPrice, int confirm) 
 		}
 
 		rp_GetItemData(itemID, item_type_name, tmp3, sizeof(tmp3));
-		menu.SetTitle("Hotel des ventes: Vendre\nVous allez déposer une offre pour\n%d %s pour %d$?\nCoût du dépot: %d$\n \nConfirmez-vous ?\n ", quantity, tmp3, sellPrice, tax);
+		menu.SetTitle("Hôtel des ventes: Vendre\nVous allez déposer une offre pour\n%d %s pour %d$?\nCoût du dépot: %d$\n \nConfirmez-vous ?\n ", quantity, tmp3, sellPrice, tax);
 		
 		Format(tmp, sizeof(tmp), "sell %d %d %d 1", itemID, quantity, sellPrice);
 		
@@ -144,7 +149,7 @@ void HDV_Sell(int client, int itemID, int quantity, int sellPrice, int confirm) 
 		}
 		
 		if( rp_GetClientItem(client, itemID) < quantity ) {
-			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous n'avez pas la quantité que vous avez spécifié.");
+			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous n'avez pas la quantité que vous avez spécifiée.");
 			delete menu;
 			return;
 		}
@@ -155,7 +160,7 @@ void HDV_Sell(int client, int itemID, int quantity, int sellPrice, int confirm) 
 			return;
 		}
 		
-		rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money)-tax);
+		rp_ClientMoney(client, i_Money, -tax);
 		rp_ClientGiveItem(client, itemID, -quantity);
 		rp_IncrementSuccess(client, success_list_hdv);
 		char szQuery[256], steamid[32];
@@ -320,7 +325,7 @@ public void SQL_DepositCB(Handle owner, Handle handle, const char[] error, any d
 		quantity = ReadPackCell(data);
 		tax = ReadPackCell(data);
 		
-		rp_SetClientInt(client, i_Bank, rp_GetClientInt(client, i_Bank)+tax);
+		rp_ClientMoney(client, i_Bank, tax);
 		rp_ClientGiveItem(client, itemID, quantity);
 		
 		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Une erreur s'est produite lors de la mise en vente, vos objets ainsi que la taxe de mise en vente vous ont été restitués.");
@@ -416,7 +421,7 @@ public void SQL_ListItemsCB(Handle owner, Handle row, const char[] error, any cl
 		menu.Display(client, MENU_TIME_FOREVER);
 	}
 	else{
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Tout les objets ont déjà été achetés.");
+		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Tous les objets ont déjà été achetés.");
 		return;
 	}
 }
@@ -442,7 +447,7 @@ public void SQL_AchatCB(Handle owner, Handle handle, const char[] error, any dat
 	}
 	char szQuery[256], tmp[64];
 	rp_ClientGiveItem(client, itemID, dataQte);
-	rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money)-dataPrix);
+	rp_ClientMoney(client, i_Money, -dataPrix);
 	Format(szQuery, sizeof(szQuery), "INSERT INTO `rp_users2`(`steamid`, `bank`, `pseudo`) VALUES ((SELECT `steamid` FROM `rp_trade` WHERE `id`=%d), %d, 'vente HDV')", transactID, dataPrix);
 	SQL_TQuery(rp_GetDatabase(), SQL_QueryCallBack, szQuery);
 	rp_GetItemData(itemID, item_type_name, tmp, sizeof(tmp));
@@ -478,11 +483,11 @@ public void SQL_HistoryCB(Handle owner, Handle row, const char[] error, any data
 				menu.AddItem(tmp, tmp2, ITEMDRAW_DISABLED);
 		}
 		if(data == 1)
-			menu.SetTitle("Hotel des ventes: Ventes en cours\n ");
+			menu.SetTitle("Hôtel des ventes: Ventes en cours\n ");
 		else if(data == 2)
-			menu.SetTitle("Hotel des ventes: Historique des achats\n ");
+			menu.SetTitle("Hôtel des ventes: Historique des achats\n ");
 		else
-			menu.SetTitle("Hotel des ventes: Historique des ventes\n ");
+			menu.SetTitle("Hôtel des ventes: Historique des ventes\n ");
 		menu.Display(client, MENU_TIME_FOREVER);
 	}
 	else{

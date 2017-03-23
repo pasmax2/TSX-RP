@@ -126,7 +126,7 @@ public Action Cmd_ItemCraftBook(int args) {
 	else if( StrEqual(arg, "focus") )
 		type = book_focus;
 	else if( StrEqual(arg, "speed") )
-		type = book_sleep;
+		type = book_speed;
 	else if( StrEqual(arg, "steal") )
 		type = book_steal;
 	else if( StrEqual(arg, "luck") )
@@ -657,7 +657,7 @@ public Action stopBuilding(Handle timer, Handle dp) {
 			magic.GetArray(i, data);
 			
 			if( !failed )
-				ClientGiveXP(client, rp_GetItemInt(data[craft_raw], item_type_prix));
+				ClientGiveXP(client, rp_GetItemInt(data[craft_raw], item_type_prix) *  data[craft_amount]);
 			if( !free )
 				rp_ClientGiveItem(client, data[craft_raw], -data[craft_amount]);		
 		}

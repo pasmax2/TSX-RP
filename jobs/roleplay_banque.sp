@@ -50,6 +50,7 @@ public void OnPluginStart() {
 	RegServerCmd("rp_item_distrib",		Cmd_ItemDistrib,		"RP-ITEM", 	FCVAR_UNREGISTERED);
 	RegServerCmd("rp_item_banksort",	Cmd_ItemBankSort,		"RP-ITEM", 	FCVAR_UNREGISTERED);
 	RegServerCmd("rp_item_sign",		Cmd_ItemCraftSign,		"RP-ITEM", 	FCVAR_UNREGISTERED);
+	RegServerCmd("rp_item_assuVie",		Cmd_ItemAssuVie,		"RP-ITEM", 	FCVAR_UNREGISTERED);
 	
 	for (int i = 1; i <= MaxClients; i++)
 		if( IsValidClient(i) )
@@ -66,6 +67,9 @@ public void OnClientPostAdminCheck(int client) {
 	rp_HookEvent(client, RP_OnPlayerCommand, fwdCommand);
 	rp_HookEvent(client, RP_OnPlayerUse, fwdUse);
 	rp_HookEvent(client, RP_OnPlayerHINT, fwdPlayerHINT);
+	
+	if( rp_GetClientBool(client, b_AssuranceVie) )
+		rp_HookEvent(client, RP_OnPlayerDead, OnPlayerDeathFastRespawn);
 }
 
 public Action Cmd_ItemCraftSign(int args) {
@@ -219,6 +223,35 @@ public Action Cmd_ItemAssurance(int args) {
 	
 	return Plugin_Handled;
 }
+
+public Action Cmd_ItemAssuVie(int args){
+	#if defined DEBUG
+	PrintToServer("Cmd_ItemAssuVie");
+	#endif
+	
+	int client = GetCmdArgInt(1);
+	
+	if( !rp_GetClientBool(client, b_AssuranceVie) ) {
+		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous etes maintenant couvert par l'assurance vie.");
+		rp_IncrementSuccess(client, success_list_assurance);
+	}
+	
+	rp_SetClientBool(client, b_AssuranceVie, true);
+	rp_HookEvent(client, RP_OnAssurance,	fwdAssurance);
+	rp_HookEvent(client, RP_OnPlayerDead, OnPlayerDeathFastRespawn);
+	
+	return Plugin_Handled;
+}
+public Action OnPlayerDeathFastRespawn(int victim, int attacker, float& respawn) {
+	respawn /= 2.0;
+	return Plugin_Continue;
+}
+
+public Action fwdAssurance(int client, int& amount) {
+	amount += 2000;
+	return Plugin_Changed;
+}
+
 public Action Cmd_ItemNoAction(int args) {
 	#if defined DEBUG
 	PrintToServer("Cmd_ItemNoAction");
@@ -431,8 +464,11 @@ public Action Cmd_ItemPackDebutant(int args) { //Permet d'avoir la CB, le compte
 	rp_SetClientBool(client, b_HaveCard, true);
 	rp_SetClientBool(client, b_PayToBank, true);
 	rp_SetClientBool(client, b_HaveAccount, true);
-	
-	CPrintToChat(client, "{lightblue}[TSX-RP]{default} Votre carte bancaire, votre compte bancaire et votre RIB sont maintenant actifs.");
+	rp_SetClientBool(client, b_License1, true);
+ 	rp_SetClientBool(client, b_License2, true);
+ 	rp_SetClientBool(client, b_LicenseSell, true);
+ 	
+	CPrintToChat(client, "{lightblue}[TSX-RP]{default} Votre carte bancaire, votre coffre, votre RIB et vos permis sont maintenant actifs.");
 
 	rp_ClientSave(client);
 }
@@ -494,7 +530,7 @@ int BuidlingATM(int client) {
 		if( StrEqual(classname, tmp) && rp_GetBuildingData(i, BD_owner) == client ) {
 			count++;
 			if( count >= 2 ) {
-				CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez déjà deux banques de placées.");
+				CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez déjà deux distributeurs portables de placés.");
 				return 0;
 			}
 		}
@@ -646,7 +682,7 @@ public int eventMetroMenu(Handle menu, MenuAction action, int client, int param2
 		min = 5 - (min % 5);
 		
 		rp_GetZoneData(rp_GetZoneFromPoint(pos), zone_type_name, tmp, sizeof(tmp));
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Restez assis à l'intérieur du métro, le prochain départ pour %s est dans %d seconde(s).", tmp, min );
+		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Restez assis à l'intérieur du métro, le prochain départ pour %s est dans %d seconde%s.", tmp, min, min >= 2 ? "s" : "");
 		rp_SetClientInt(client, i_TeleportTo, i);
 		CreateTimer(float(min) + Math_GetRandomFloat(0.01, 0.8), metroTeleport, client);
 	}
@@ -693,9 +729,9 @@ public Action metroTeleport(Handle timer, any client) {
 		rp_ClientGiveItem(client, 42, -1, true);
 	}
 	if( !paid && (rp_GetClientInt(client, i_Money)+rp_GetClientInt(client, i_Bank)) >= 100 ) {
-		rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money) - 100);
+		rp_ClientMoney(client, i_Money, -100);
 		rp_SetJobCapital(31, rp_GetJobCapital(31) + 100);
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Le métro vous a couté 100$. Pensez à acheter des tickets à un banquier pour obtenir une réduction.");
+		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Le métro vous a couté 100$. Pensez à acheter des tickets à un banquier pour que le trajet vous coûte moins chère.");
 		paid = true;
 	}
 	
@@ -753,6 +789,8 @@ int BuidlingSIGN(int client) {
 	GetClientAbsOrigin(client, vecOrigin);
 	int count;
 	
+	bool isAdmin = view_as<bool>(GetUserFlagBits(client) & (ADMFLAG_GENERIC|ADMFLAG_ROOT));
+	
 	for(int i=1; i<=2048; i++) {
 		if( !IsValidEdict(i) )
 			continue;
@@ -763,8 +801,9 @@ int BuidlingSIGN(int client) {
 		
 		if( StrEqual(classname, tmp) && rp_GetBuildingData(i, BD_owner) == client ) {
 			count++;
-			if( count >= 1 ) {
-				CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez panneau indicateur de placé.");
+			
+			if( count >= 1 && !isAdmin ) {
+				CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez placé un panneau indicateur.");
 				return 0;
 			}
 		}
@@ -919,7 +958,7 @@ public int Menu_displayMenu(Handle menu, MenuAction action, int client, int para
 			Format(options, sizeof(options), "%d %d", -1000+2, entity);	menu2.AddItem(options, "Tous les chefs de mon job");
 			Format(options, sizeof(options), "%d %d", -1000+3, entity);	menu2.AddItem(options, "Toutes les personnes de mon job");
 			Format(options, sizeof(options), "%d %d", -1000+4, entity); menu2.AddItem(options, "Toutes les personnes de mon gang");
-			Format(options, sizeof(options), "%d %d", -1000+5, entity); menu2.AddItem(options, "Tous le monde");
+			Format(options, sizeof(options), "%d %d", -1000+5, entity); menu2.AddItem(options, "Tout le monde");
 			
 			menu2.Display(client, MENU_TIME_FOREVER);
 		}
@@ -968,4 +1007,5 @@ int isNearSign(int client) {
 	}
 	return -1;
 }
+
 

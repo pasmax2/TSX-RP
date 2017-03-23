@@ -120,10 +120,14 @@ public Action Cmd_ItemBioKev(int args) {
 	if( rp_GetClientBool(client, ch_Kevlar) ) {
 		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez déjà une régénération bionique.");
 		ITEM_CANCEL(client, item_id);
+		
+		LogToGame("[CHEATING] %L a tenté de cumuler les regens bioniques.", client);
+		return Plugin_Handled;
 	}
 	
 	rp_HookEvent(client, RP_OnFrameSeconde, fwdRegenKevlar);
 	rp_SetClientBool(client, ch_Kevlar, true);
+	return Plugin_Continue;
 }
 // ------------------------------------------------------------------------------
 public Action Cmd_ItemBioYeux(int args) {
@@ -137,10 +141,12 @@ public Action Cmd_ItemBioYeux(int args) {
 	if( rp_GetClientBool(client, ch_Yeux) ) {
 		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez déjà des yeux bioniques.");
 		ITEM_CANCEL(client, item_id);
+		return Plugin_Handled;
 	}
 	
 	rp_HookEvent(client, RP_PreHUDColorize, fwfBioYeux);
 	rp_SetClientBool(client, ch_Yeux, true);
+	return Plugin_Continue;
 }
 public Action fwfBioYeux(int client, int color[4]) {
 	#if defined DEBUG
@@ -543,10 +549,12 @@ public Action Frame_CashMachine(Handle timer, any ent) {
 	if (heal > 100) heal = 100;
 	Entity_SetHealth(ent, heal, true);
 	
-	if( !rp_GetClientBool(client, b_IsAFK) && rp_GetClientInt(client, i_TimeAFK) <= 60 && g_bProps_trapped[ent] == false ) {
+	
+	
+	if( !rp_GetClientBool(client, b_IsAFK) && rp_GetClientInt(client, i_TimeAFK) <= 60 && g_bProps_trapped[ent] == false && rp_GetClientInt(client, i_SearchLVL) < 5 ) {
 		EmitSoundToAllAny("ambient/tones/equip3.wav", ent, _, _, _, 0.66);
 		
-		rp_SetClientInt(client, i_Bank, rp_GetClientInt(client, i_Bank)+1);
+		rp_ClientMoney(client, i_Bank, 1);
 		rp_SetClientStat(client, i_MoneyEarned_CashMachine, rp_GetClientStat(client, i_MoneyEarned_CashMachine)+1);
 		
 		int capital_id = rp_GetRandomCapital( rp_GetClientJobID(client) );
@@ -575,10 +583,12 @@ public Action Frame_CashMachine(Handle timer, any ent) {
 		
 		if( rp_GetClientJobID(client) == target || rp_GetClientGroupID(client) == (target-1000) ) {
 			
-			if( rp_GetServerRules(rules_Productions, rules_Arg) == 1 )
-				time += 1.0;
-			else
+			if( rp_GetServerRules(rules_Productions, rules_Arg) == 1 ) {
 				time -= 1.0;
+			}
+			else {
+				time += 1.0;
+			}
 		}
 	}
 	
@@ -616,7 +626,7 @@ void CashMachine_Destroy(int entity) {
 		rp_ClientOverlays(owner, o_Action_DestroyMachine, 10.0);
 		
 		if( rp_GetBuildingData(entity, BD_started)+120 < GetTime() ) {
-			rp_SetClientInt(owner, i_Bank, rp_GetClientInt(owner, i_Bank)-25);
+			rp_ClientMoney(owner, i_Bank, -25);
 		}
 	}
 }
@@ -794,10 +804,10 @@ public Action Frame_BigCashMachine(Handle timer, any ent) {
 	if (heal > 1000) heal = 1000;
 	Entity_SetHealth(ent, heal, true);
 	
-	if( !rp_GetClientBool(client, b_IsAFK) && rp_GetClientInt(client, i_TimeAFK) <= 60 && g_bProps_trapped[ent] == false ) {
+	if( !rp_GetClientBool(client, b_IsAFK) && rp_GetClientInt(client, i_TimeAFK) <= 60 && g_bProps_trapped[ent] == false && rp_GetClientInt(client, i_SearchLVL) < 5 ) {
 		EmitSoundToAllAny("ambient/tones/equip3.wav", ent, _, _, _, 1.0);
 		
-		rp_SetClientInt(client, i_Bank, rp_GetClientInt(client, i_Bank)+2);
+		rp_ClientMoney(client, i_Bank, 2);
 		rp_SetClientStat(client, i_MoneyEarned_CashMachine, rp_GetClientStat(client, i_MoneyEarned_CashMachine)+2);
 		
 		int capital_id = rp_GetRandomCapital( rp_GetClientJobID(client) );

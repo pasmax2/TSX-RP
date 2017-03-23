@@ -13,6 +13,7 @@
 #include <sourcemod>
 #include <cstrike>
 #include <sdkhooks>
+
 #include <colors_csgo>	// https://forums.alliedmods.net/showthread.php?p=2205447#post2205447
 #include <smlib>		// https://github.com/bcserv/smlib
 
@@ -35,6 +36,8 @@ enum competance {
 	competance_invis,
 	competance_hp,
 	competance_vitesse,
+	competance_cryo,
+	competance_berserk,
 	competance_type,
 	
 	competance_max
@@ -59,11 +62,10 @@ public void OnPluginStart() {
 	RegServerCmd("rp_item_contrat",		Cmd_ItemContrat,		"RP-ITEM",	FCVAR_UNREGISTERED);
 	RegServerCmd("rp_item_conprotect",	Cmd_ItemConProtect,		"RP-ITEM",	FCVAR_UNREGISTERED);
 	RegServerCmd("rp_item_enquete_menu",Cmd_ItemEnqueteMenu,	"RP-ITEM",	FCVAR_UNREGISTERED);
-	RegServerCmd("rp_item_enquete",		Cmd_ItemEnquete,		"RP-ITEM",	FCVAR_UNREGISTERED);
 	RegServerCmd("rp_item_cryptage",	Cmd_ItemCryptage,		"RP-ITEM",	FCVAR_UNREGISTERED);
 	RegServerCmd("rp_item_map",			Cmd_ItemMaps,			"RP-ITEM",	FCVAR_UNREGISTERED);
 	
-	g_vConfigTueur = CreateConVar("rp_config_kidnapping", "149,150,151,152,160,161-162");
+	g_vConfigTueur = CreateConVar("rp_config_kidnapping", "165,166,167,168,179,177-178");
 	
 	for (int i = 1; i <= MaxClients; i++)
 		if( IsValidClient(i) )
@@ -157,7 +159,6 @@ public Action Cmd_ItemContrat(int args) {
 		case 47: g_iKillerPoint[vendeur][competance_left] = 3;					
 		default: g_iKillerPoint[vendeur][competance_left] = 0;
 	}
-	OpenSelectSkill(vendeur);
 	
 	rp_SetClientInt(vendeur, i_ToKill, target);
 	rp_SetClientInt(vendeur, i_ContratFor, client);
@@ -196,8 +197,12 @@ public Action Cmd_ItemContrat(int args) {
 	}
 	else if( StrContains(arg1, "lupin") == 0 ) {
 		g_iKillerPoint[vendeur][competance_type] = 1006;
+		rp_SetClientInt(target, i_ContratTotal, rp_GetClientInt(target, i_ContratTotal) + 10);
 	}
 	
+	rp_SetClientInt(vendeur, i_ContratType, g_iKillerPoint[vendeur][competance_type]);
+	
+	OpenSelectSkill(vendeur);
 	
 	if( !IsValidClient(target) ) {
 		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Votre cible s'est déconnectée.");
@@ -226,17 +231,37 @@ public Action fwdFrame(int client) {
 	
 	return Plugin_Continue;
 }
+public Action TaskResetAttacker(Handle timer, any attacker) {
+	if( IsValidClient(attacker) )
+		rp_SetClientInt(attacker, i_LastKilled_Reverse, 0);
+}
+public Action TaskResetVictim(Handle timer, any client) {
+	if( IsValidClient(client) )
+		rp_SetClientInt(client, i_LastKilled, 0);
+}
 public Action fwdTueurKill(int client, int attacker, float& respawn) {
 	if( rp_GetClientInt(attacker, i_ToKill) == client && rp_GetClientInt(client, i_KidnappedBy) != attacker ) {
 		rp_SetClientStat(attacker, i_JobSucess, rp_GetClientStat(client, i_JobSucess) + 1);
 		rp_SetClientStat(attacker, i_JobFails, rp_GetClientStat(client, i_JobFails) - 1);
+
 		CPrintToChat(attacker, "{lightblue}[TSX-RP]{default} Vous avez rempli votre contrat pour avoir tué %N.", client);
-		rp_SetClientInt(attacker, i_AddToPay, rp_GetClientInt(attacker, i_AddToPay) + 100);
 		
 		int from = rp_GetClientInt(attacker, i_ContratFor);
 		bool kidnapping = false;
 		
+		CreateTimer(0.1, TaskResetAttacker, attacker);
+		CreateTimer(0.1, TaskResetVictim, client);		
+		
 		if( IsValidClient(from) ) {
+			
+			if( rp_GetClientJobID(from) != 41 ) {
+				rp_ClientXPIncrement(attacker, 100);
+				
+				int rnd = rp_GetRandomCapital(41);
+				rp_SetJobCapital(rnd, rp_GetJobCapital(rnd) - 200);
+				rp_SetJobCapital(41, rp_GetJobCapital(41) + 200);
+			}
+			
 			CPrintToChat(from, "{lightblue}[TSX-RP]{default} %N a rempli son contrat en tuant %N.", attacker, client);
 			rp_IncrementSuccess(from, success_list_tueur);
 			
@@ -276,9 +301,9 @@ public Action fwdTueurKill(int client, int attacker, float& respawn) {
 				rp_ClientFloodIncrement(0, client, fd_kidnapping, 6.0*60.0);
 			}
 			else if( g_iKillerPoint[attacker][competance_type] == 1006 ) {
-				if((rp_GetClientInt(client, i_Money)+rp_GetClientInt(client, i_Bank)) > 1000){
-					rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money) - 100);
-					rp_SetClientInt(from, i_Money, rp_GetClientInt(from, i_Money) + 100);
+				if( rp_GetClientBool(client, b_HaveCard) == true ){
+					rp_SetClientBool(client, b_HaveCard, false);
+					CPrintToChat(client, "{lightblue}[TSX-RP]{default} Un mercenaire vous a pris votre portefeuille, et vous a volé votre carte bancaire...");
 				}
 				respawn *= 1.25;			
 			}
@@ -409,33 +434,22 @@ void OpenSelectSkill(int client) {
 	SetMenuTitle(menu, tmp);
 	
 	AddMenuItem(menu, "annule", "Annuler mon contrat");
-	
-	if( g_iKillerPoint[client][competance_left] > 0 && !g_iKillerPoint[client][competance_cut] ) {
-		AddMenuItem(menu, "cut", "Cut Maximum");
-	}
-	if( g_iKillerPoint[client][competance_left] > 0 && !g_iKillerPoint[client][competance_tir] ) {
-		AddMenuItem(menu, "tir", "Precision Maximum");
-	}
-	if( g_iKillerPoint[client][competance_left] > 0 && !g_iKillerPoint[client][competance_usp] && ( !g_iKillerPoint[client][competance_awp] && !g_iKillerPoint[client][competance_pompe] )) { //On ne peut pas selectionner une arme si on en déjà choisi une auparavant
-		AddMenuItem(menu, "usp", "M4 / Usp");
-	}
-	if( g_iKillerPoint[client][competance_left] > 0 && !g_iKillerPoint[client][competance_awp] && ( !g_iKillerPoint[client][competance_usp] && !g_iKillerPoint[client][competance_pompe] )) {
-		AddMenuItem(menu, "awp", "AWP / Cz75");
-	}
-	if( g_iKillerPoint[client][competance_left] > 0 && !g_iKillerPoint[client][competance_pompe] && ( !g_iKillerPoint[client][competance_awp] && !g_iKillerPoint[client][competance_usp] )) {
-		AddMenuItem(menu, "pompe", "Nova / Deagle");
-	}
-	if( g_iKillerPoint[client][competance_left] > 0 && !g_iKillerPoint[client][competance_invis] ) {
-		AddMenuItem(menu, "inv", "Invisibilité");
-	}
-	if( g_iKillerPoint[client][competance_left] > 0 && !g_iKillerPoint[client][competance_hp] ) {
-		AddMenuItem(menu, "vie", "Vie");
-	}
-	if( g_iKillerPoint[client][competance_left] > 0 && !g_iKillerPoint[client][competance_vitesse] ) {
-		AddMenuItem(menu, "vit", "Vitesse");
+	int target = rp_GetClientInt(client, i_ToKill);
+	if( IsValidClient(target) && g_iKillerPoint[client][competance_left] > 0 ) {
+		AddMenuItem(menu, "cut", "Cut Maximum", g_iKillerPoint[client][competance_cut] ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+		AddMenuItem(menu, "tir", "Precision Maximum", g_iKillerPoint[client][competance_tir]);
+		AddMenuItem(menu, "usp", "M4 / Usp", (g_iKillerPoint[client][competance_usp] || g_iKillerPoint[client][competance_pompe] || g_iKillerPoint[client][competance_awp]) ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+		AddMenuItem(menu, "awp", "AWP / Cz75", (g_iKillerPoint[client][competance_usp] || g_iKillerPoint[client][competance_pompe] || g_iKillerPoint[client][competance_awp]) ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+		AddMenuItem(menu, "pompe", "Nova / Deagle", (g_iKillerPoint[client][competance_usp] || g_iKillerPoint[client][competance_pompe] || g_iKillerPoint[client][competance_awp]) ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+		AddMenuItem(menu, "inv", "Invisibilité", g_iKillerPoint[client][competance_invis] ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+		AddMenuItem(menu, "vie", "Vie", g_iKillerPoint[client][competance_hp] ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+		AddMenuItem(menu, "vit", "Vitesse", g_iKillerPoint[client][competance_vitesse] ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+		if( rp_GetClientJobID(target) == 1 || rp_GetClientJobID(target) == 101 )
+			AddMenuItem(menu, "berserk", "seringue Berserk", g_iKillerPoint[client][competance_berserk] ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
+		if(g_iKillerPoint[client][competance_type] == 1005)
+			AddMenuItem(menu, "nano", "Nano-Cryogénisation", g_iKillerPoint[client][competance_cryo] ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
 	}
 	
-	SetMenuExitButton(menu, false);
 	DisplayMenu(menu, client, MENU_TIME_DURATION);
 }
 public int AddCompetanceToAssassin(Handle menu, MenuAction action, int client, int param2) {
@@ -453,7 +467,7 @@ public int AddCompetanceToAssassin(Handle menu, MenuAction action, int client, i
 		
 		if( StrEqual(options, "annule", false) ) {
 			LogToGame("[CONTRAT] %L a annulé son contrat.", client);
-			SetContratFail(client);
+			SetContratFail(client, false, true);
 		}
 		else if( g_iKillerPoint[client][competance_left] <= 0 ) {
 			return;
@@ -519,6 +533,14 @@ public int AddCompetanceToAssassin(Handle menu, MenuAction action, int client, i
 			g_iKillerPoint[client][competance_vitesse] = 1;
 			rp_HookEvent(client, RP_PrePlayerPhysic, fwdSpeed);
 		}
+		else if( StrEqual(options, "nano", false) ) {
+			g_iKillerPoint[client][competance_cryo] = 1;
+			rp_ClientGiveItem(client, 78);
+		}
+		else if( StrEqual(options, "berserk", false) ) {
+			g_iKillerPoint[client][competance_berserk] = 1;
+			rp_ClientGiveItem(client, 6);
+		}
 		
 		g_iKillerPoint[client][competance_left]--;
 		OpenSelectSkill(client);
@@ -528,7 +550,8 @@ public int AddCompetanceToAssassin(Handle menu, MenuAction action, int client, i
 	}
 }
 public void OnPostThinkPost(int client) {
-	SetEntProp(client, Prop_Send, "m_iAddonBits", 0);
+	if( IsPlayerAlive(client) )
+		SetEntProp(client, Prop_Send, "m_iAddonBits", 0);
 }
 // ----------------------------------------------------------------------------
 void RestoreAssassinNormal(int client) {
@@ -537,6 +560,7 @@ void RestoreAssassinNormal(int client) {
 	#endif
 	
 	g_iKillerPoint[client][competance_left] = 0;
+	rp_SetClientInt(client, i_ContratType, 0);
 	
 	if( g_iKillerPoint[client][competance_cut] ) {
 		rp_SetClientInt(client, i_KnifeTrain, g_iKillerPoint_stored[client][competance_cut]);
@@ -577,6 +601,8 @@ void RestoreAssassinNormal(int client) {
 	g_iKillerPoint[client][competance_invis] = 0;
 	g_iKillerPoint[client][competance_hp] = 0;
 	g_iKillerPoint[client][competance_vitesse] = 0;
+	g_iKillerPoint[client][competance_cryo] = 0;
+	g_iKillerPoint[client][competance_berserk] = 0;
 	
 	SDKUnhook(client, SDKHook_WeaponDrop, OnWeaponDrop);
 	rp_UnhookEvent(client, RP_OnPlayerDead, fwdTueurDead);
@@ -592,7 +618,7 @@ void RestoreAssassinNormal(int client) {
 	
 	rp_ClientColorize(client);
 }
-void SetContratFail(int client, bool time = false) { // time = retro-compatibilité. 
+void SetContratFail(int client, bool time = false, bool annule = false) { // time = retro-compatibilité. 
 	#if defined DEBUG
 	PrintToServer("SetContratFail");
 	#endif
@@ -603,6 +629,8 @@ void SetContratFail(int client, bool time = false) { // time = retro-compatibili
 		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous n'avez pas rempli votre contrat à temps.");
 	else if( jobClient != 41 ) // si le tueur a démissionné entre temps
 		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous n'êtes plus mercenaire, vous ne pouvez plus remplir votre contrat.");
+	else if(annule)
+		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous venez d'annuler votre contrat.");
 	else
 		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous êtes mort et n'avez pas rempli votre contrat.");
 	
@@ -614,16 +642,17 @@ void SetContratFail(int client, bool time = false) { // time = retro-compatibili
 				CPrintToChat(target, "{lightblue}[TSX-RP]{default} %N n'a pas rempli son contrat à temps.", client);
 			else if( jobClient != 41 ) // si le tueur a démissionné entre temps
 				CPrintToChat(target, "{lightblue}[TSX-RP]{default} %N n'est plus mercenaire et ne peut plus remplir votre contrat.", client);
+			else if(annule)
+				CPrintToChat(target, "{lightblue}[TSX-RP]{default} %N a annulé son contrat.", client);
 			else
 				CPrintToChat(target, "{lightblue}[TSX-RP]{default} %N a été tué et n'a pas pu remplir son contrat.", client);
-			
 			
 			
 			int prix = rp_GetClientInt(client, i_ContratPay);
 			int reduction = rp_GetClientInt(client, i_Reduction);
 			
-			rp_SetClientInt(target, i_Bank, rp_GetClientInt(target, i_Bank) + prix - (RoundFloat((float(prix) / 100.0) * float(reduction)) / 2));
-			rp_SetClientInt(client, i_AddToPay, rp_GetClientInt(client, i_AddToPay) - (prix - RoundFloat( (float(prix) / 100.0) * float(reduction))) / 2);
+			rp_ClientMoney(target, i_Bank, prix - (RoundFloat((float(prix) / 100.0) * float(reduction)) / 2));
+			rp_ClientMoney(client, i_AddToPay, -(prix - RoundFloat((float(prix) / 100.0) * float(reduction))) / 2);
 			rp_SetJobCapital(41, rp_GetJobCapital(41) - (prix / 2));
 			
 			Call_StartForward(rp_GetForwardHandle(client, RP_OnPlayerSell));
@@ -765,7 +794,7 @@ public Action FreeKidnapping(Handle timer, any client) {
 	rp_ClientTeleport(client,  view_as<float>({2911.0, 868.0, -1853.0}));
 	rp_ClientSendToSpawn(client, true); // C'est proche du comico. 
 	CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vos ravisseurs vous ont finalement libéré.");
-	CPrintToChat(target, "{lightblue}[TSX-RP]{default} Vous avez libéré %N.", target);
+	CPrintToChat(target, "{lightblue}[TSX-RP]{default} Vous avez libéré %N.", client);
 	
 	return Plugin_Continue;
 }
@@ -785,8 +814,8 @@ public int eventKidnapping(Handle p_hItemMenu, MenuAction p_oAction, int client,
 			int from = rp_GetClientInt(client, i_ToPay);
 			int target = rp_GetClientInt(client, i_KidnappedBy);
 			
-			rp_SetClientInt(client, i_Bank, rp_GetClientInt(client, i_Bank) - 2500);
-			rp_SetClientInt(from, i_Bank, rp_GetClientInt(from, i_Bank) + 2500);			
+			rp_ClientMoney(client, i_Bank, -2500);
+			rp_ClientMoney(from, i_Bank, 2500);		
 			
 			CPrintToChat(from, "{lightblue}[TSX-RP]{default} %N a payé la rançon de 2500$.", client);
 			CPrintToChat(target, "{lightblue}[TSX-RP]{default} %N a payé la rançon de 2500$.", client);
@@ -907,6 +936,12 @@ public Action Cmd_ItemCryptage(int args) {
 	int client = GetCmdArgInt(1);
 	int item_id = GetCmdArgInt(args);
 	
+	if( rp_GetClientInt(client, i_SearchLVL) >= 3 ) {
+		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Le Tribunal de princeton a gelé vos achats de pot de vin car vous êtes recherché depuis trop longtemps.");
+		ITEM_CANCEL(client, item_id);
+		return Plugin_Handled;
+	}
+	
 	if(rp_GetClientJobID(client) == 1 || rp_GetClientJobID(client) == 101){
 		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Cet objet est interdit aux forces de l'ordre.");
 		ITEM_CANCEL(client, item_id);
@@ -976,141 +1011,6 @@ public int Cmd_ItemEnqueteMenu_2(Handle p_hItemMenu, MenuAction p_oAction, int c
 		CloseHandle(p_hItemMenu);
 	}
 }
-public Action Cmd_ItemEnquete(int args) {
-	#if defined DEBUG
-	PrintToServer("Cmd_ItemEnquete");
-	#endif
-	
-	int client = GetCmdArgInt(1);
-	int target = GetCmdArgInt(2);
-	char tmp[255];
-	
-	
-	rp_IncrementSuccess(client, success_list_detective);
-	
-	// Setup menu
-	Handle menu = CreateMenu(MenuNothing);
-	SetMenuTitle(menu, "Information sur %N\n ", target);
-	
-	PrintToConsole(client, "\n\n\n\n\n -------------------------------------------------------------------------------------------- ");
-	
-	rp_GetZoneData(rp_GetPlayerZone(target), zone_type_name, tmp, sizeof(tmp));
-	
-	AddMenu_Blank(client, menu, "Localisation: %s", tmp);	
-	
-	int killedBy = rp_GetClientInt(target, i_LastKilled_Reverse);
-	if( IsValidClient(killedBy) ) {
-		if( Math_GetRandomInt(1, 100) < rp_GetClientInt(target, i_Cryptage)*20 ) {
-			
-			String_GetRandom(tmp, sizeof(tmp), 24);
-			
-			AddMenu_Blank(client, menu, "Il a tué: %s", tmp);
-			CPrintToChat(target, "{lightblue}[TSX-RP]{default} Votre pot de vin envers un mercenaire vient de vous sauver.");
-			LogToGame("[TSX-RP] [ENQUETE] Une enquête effectuée sur %L n'a pas montré qui l'a tué pour cause de pot de vin.", target);
-		}
-		else {	
-			AddMenu_Blank(client, menu, "Il a tué: %N", killedBy);
-			LogToGame("[TSX-RP] [ENQUETE] Une enquête effectuée sur %L a montré qu'il a tué %L.", target, killedBy);
-		}
-	}
-	else{
-		LogToGame("[TSX-RP] [ENQUETE] Une enquête effectuée sur %L a révélé qu'il n'a tué personne", target, killedBy);
-	}
-	
-	if( rp_GetClientInt(target, i_KillingSpread) > 0 )
-		AddMenu_Blank(client, menu, "Meurtre consécutif: %i", rp_GetClientInt(target, i_KillingSpread) );
-	
-	int killed = rp_GetClientInt(target, i_LastKilled);
-	if( IsValidClient(killed) ) {
-		
-		if( Math_GetRandomInt(1, 100) < rp_GetClientInt(killed, i_Cryptage)*20 ) {	
-			
-			String_GetRandom(tmp, sizeof(tmp), 24);
-			
-			AddMenu_Blank(client, menu, "%s, l'a tué", tmp);
-			CPrintToChat(killed, "{lightblue}[TSX-RP]{default} Votre pot de vin envers un mercenaire vient de vous sauver.");
-			LogToGame("[TSX-RP] [ENQUETE] Une enquête effectuée sur %L n'a pas montré qui l'a tué pour cause de pot de vin.", target);
-		}
-		else {
-			AddMenu_Blank(client, menu, "%N, l'a tué", killed);
-			LogToGame("[TSX-RP] [ENQUETE] Une enquête effectuée sur %L a montré que %L l'a tué.", target, killed);
-		}
-	}
-	else{
-		LogToGame("[TSX-RP] [ENQUETE] Une enquête effectuée sur %L a révélé qu'il n'a été tué par personne.", target, killed);
-	}
-	
-	if( IsValidClient(rp_GetClientInt(target, i_LastVol)) ) 
-		AddMenu_Blank(client, menu, "%N, l'a volé", rp_GetClientInt(target, i_LastVol) );
-	
-	AddMenu_Blank(client, menu, "--------------------------------");
-	
-	AddMenu_Blank(client, menu, "Niveau d'entraînement: %i", rp_GetClientInt(target, i_KnifeTrain));
-	AddMenu_Blank(client, menu, "Précision de tir: %.2f", rp_GetClientFloat(target, fl_WeaponTrain));
-	
-	int count=0;
-	Format(tmp, sizeof(tmp), "Permis possédé:");
-	
-	if( rp_GetClientBool(target, b_License1) ) {	Format(tmp, sizeof(tmp), "%s léger", tmp);	count++;	}
-	if( rp_GetClientBool(target, b_License2) ) {	Format(tmp, sizeof(tmp), "%s lourd", tmp);	count++;	}
-	if( rp_GetClientBool(target, b_LicenseSell) ) {	Format(tmp, sizeof(tmp), "%s vente", tmp);	count++;	}
-	
-	if( count == 0 ) {
-		Format(tmp, sizeof(tmp), "%s Aucun", tmp);
-	}
-	AddMenu_Blank(client, menu, "%s.", tmp);
-	
-	AddMenu_Blank(client, menu, "Argent: %i$ - Banque: %i$", rp_GetClientInt(target, i_Money), rp_GetClientInt(target, i_Bank));
-	
-	count = 0;
-	Format(tmp, sizeof(tmp), "Appartement possédé: ");
-	for (int i = 1; i <= 48; i++) {
-		if( rp_GetClientKeyAppartement(target, i) ) {
-			count++;
-			if( count > 1 )
-				Format(tmp, sizeof(tmp), "%s, ", tmp);
-			Format(tmp, sizeof(tmp), "%s%d", tmp, i);
-		}	
-	}
-	
-	if( count == 0 )
-		Format(tmp, sizeof(tmp), "%s Aucun", tmp);
-	
-	AddMenu_Blank(client, menu, tmp);
-	
-	AddMenu_Blank(client, menu, "Taux d'alcoolémie: %.3f", rp_GetClientFloat(client, fl_Alcool));
-	
-	CPrintToChat(client, "{lightblue}[TSX-RP]{default} Ces informations ont été envoyées dans votre console.");
-	
-	SetMenuExitButton(menu, true);
-	DisplayMenu(menu, client, MENU_TIME_DURATION);
-}
-public int MenuNothing(Handle menu, MenuAction action, int client, int param2) {
-	#if defined DEBUG
-	PrintToServer("MenuNothing");
-	#endif
-	
-	if( action == MenuAction_Select ) {
-		if( menu != INVALID_HANDLE )
-			CloseHandle(menu);
-	}
-	else if( action == MenuAction_End ) {
-		if( menu != INVALID_HANDLE )
-			CloseHandle(menu);
-	}
-}
-// ----------------------------------------------------------------------------
-void AddMenu_Blank(int client, Handle menu, const char[] myString , any ...) {
-	#if defined DEBUG
-	PrintToServer("AddMenu_Blank");
-	#endif
-	char[] str = new char[ strlen(myString)+255 ];
-	VFormat(str, (strlen(myString)+255), myString, 4);
-	
-	AddMenuItem(menu, "none", str, ITEMDRAW_DISABLED);
-	PrintToConsole(client, str);
-}
-
 public Action fwdWeapon(int victim, int attacker, float &damage, int wepID, float pos[3]) {
 	bool changed = true;
 	char sWeapon[32];

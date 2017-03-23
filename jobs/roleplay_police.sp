@@ -34,45 +34,30 @@ enum jail_raison_type {
 	jail_temps,
 	jail_temps_nopay,
 	jail_amende,
+	jail_simple,
 	
 	jail_type_max
 };
 char g_szJailRaison[][][128] = {
-	{ "Garde à vue",						"12", 	"12",	"0"},
-	{ "Meurtre",							"-1", 	"-1",	"-1"},
-	{ "Agression physique",					"1", 	"6",	"250"},
-	{ "Intrusion propriété privée",			"0", 	"3",	"100"},
-	{ "Vol, tentative de vol",				"0", 	"3",	"50"},
-	{ "Fuite, refus d'obtempérer",			"0", 	"6",	"200"},
-	{ "Insultes, Irrespect",				"1", 	"6",	"250"},
-	{ "Trafique illégal",					"0", 	"6",	"100"},
-	{ "Nuisance sonore",					"0", 	"6",	"100"},
-	{ "Tir dans la rue",					"0", 	"6",	"100"},
-	{ "Conduite dangereuse",				"0", 	"6",	"150"},
-	{ "Mutinerie, évasion",					"-2", 	"-2",	"50"}	
+	{ "Garde à vue",						"12", 	"12",	"0",	"0"},
+	{ "Meurtre",							"-1", 	"-1",	"-1",	"1"},
+	{ "Agression physique",					"1", 	"6",	"250",	"1"},
+	{ "Intrusion propriété privée",			"0", 	"3",	"100",	"0"},
+	{ "Vol, tentative de vol",				"0", 	"3",	"50",	"1"},
+	{ "Fuite, refus d'obtempérer",			"0", 	"6",	"200",	"0"},
+	{ "Insultes, Irrespect",				"1", 	"6",	"250",	"0"},
+	{ "Trafique illégal",					"0", 	"6",	"100",	"0"},
+	{ "Nuisance sonore",					"0", 	"6",	"100",	"0"},
+	{ "Tir dans la rue",					"0", 	"6",	"100",	"1"},
+	{ "Conduite dangereuse",				"0", 	"6",	"150",	"0"},
+	{ "Mutinerie, évasion",					"-2", 	"-2",	"50",	"1"}	
 };
-enum tribunal_type {
-	tribunal_steamid = 0,
-	tribunal_duration,
-	tribunal_code,
-	tribunal_option,
-	tribunal_uniqID,
-	
-	tribunal_max
-}
-enum tribunal_search_data {
-	tribunal_search_status = 0,
-	tribunal_search_where,
-	tribunal_search_starttime,
-	
-	tribunal_search_max
-}
-
 float g_flLastPos[65][3];
-int g_TribunalSearch[MAXPLAYERS+1][tribunal_search_max];
-char g_szTribunal_DATA[65][tribunal_max][64];
 DataPack g_hBuyMenu;
-int g_cBeam;
+char g_szTribunal[65][65];
+
+#define ARMU_POLICE view_as<float>({ 2550.8, 1663.1, -2015.96 })
+
 
 bool CanSendToJail(int client, int target) {
 	Action a;
@@ -101,8 +86,6 @@ public Action Cmd_Reload(int args) {
 public void OnPluginStart() {
 	RegServerCmd("rp_quest_reload", Cmd_Reload);
 	
-	RegConsoleCmd("sm_jugement",	Cmd_Jugement);
-	
 	RegServerCmd("rp_item_mandat", 		Cmd_ItemPickLock,		"RP-ITEM",	FCVAR_UNREGISTERED);
 	RegServerCmd("rp_item_ratio",		Cmd_ItemRatio,			"RP-ITEM",	FCVAR_UNREGISTERED);
 	RegServerCmd("rp_SendToJail",		Cmd_SendToJail,			"RP-ITEM",	FCVAR_UNREGISTERED);
@@ -129,11 +112,12 @@ public Action Cmd_SendToJail(int args) {
 	PrintToServer("Cmd_SendToJail");
 	#endif
 	SendPlayerToJail(GetCmdArgInt(1), GetCmdArgInt(2));
+	
+	StripWeapons(GetCmdArgInt(1));
 }
 public void OnMapStart() {
 	PrecacheModel(MODEL_PRISONNIER, true);
 	PrecacheModel(MODEL_BARRIERE, true);
-	g_cBeam = PrecacheModel("materials/sprites/laserbeam.vmt", true);
 }
 // ----------------------------------------------------------------------------
 public void OnClientPostAdminCheck(int client) {
@@ -147,7 +131,6 @@ public void OnClientPostAdminCheck(int client) {
 	rp_HookEvent(client, RP_OnPlayerZoneChange, fwdOnZoneChange);
 	rp_HookEvent(client, RP_OnPlayerUse, fwdOnPlayerUse);
 	rp_SetClientBool(client, b_IsSearchByTribunal, false);
-	g_TribunalSearch[client][tribunal_search_status] = -1;
 	
 	CreateTimer(0.01, AllowStealing, client);
 }
@@ -201,119 +184,13 @@ public Action fwdCommand(int client, char[] command, char[] arg) {
 	else if( StrEqual(command, "jail") || StrEqual(command, "prison") ) {
 		return Cmd_Jail(client);
 	}
-	else if( StrEqual(command, "tribunal") ) {
-		return Cmd_Tribunal(client);
-	}
-	else if( StrEqual(command, "mandat") ) {
-		return Cmd_Mandat(client);
-	}
 	else if( StrEqual(command, "push") ) {
 		return Cmd_Push(client);
-	}
-	else if( StrEqual(command, "conv") ) {
-		return Cmd_Conv(client);
-	}
-	else if( StrEqual(command, "amende") || StrEqual(command, "amande") ) {
-		return Cmd_Amende(client, arg);
-	}
-	else if( StrEqual(command, "audience") || StrEqual(command, "audiance") ) {
-		return Cmd_Audience(client);
-	}
-	else if( StrEqual(command, "avocat") || StrEqual(command, "avocat") ) {
-		return Cmd_Avocat(client, arg);
 	}
 	
 	return Plugin_Continue;
 }
 // ----------------------------------------------------------------------------
-public Action Cmd_Avocat(int client, const char[] arg) {
-	FakeClientCommand(client, "say /job");
-	return Plugin_Handled;
-}
-public Action Cmd_Amende(int client, const char[] arg) {
-	#if defined DEBUG
-	PrintToServer("Cmd_Amende");
-	#endif
-	int job = rp_GetClientInt(client, i_Job);
-		
-	if( job != 101 && job != 102 && job != 103 && job != 104 && job != 105 && job != 106 ) {
-		ACCESS_DENIED(client);
-	}
-	
-	if( !rp_GetClientBool(client, b_MaySteal) ) {
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Impossible pour le moment.");
-		return Plugin_Handled;
-	}
-	int target = rp_GetClientTarget(client);
-
-	if( !IsValidClient(target) )
-		return Plugin_Handled;
-
-	if( !IsPlayerAlive(target) )
-		return Plugin_Handled;
-	
-	if( rp_GetZoneInt(rp_GetPlayerZone(client), zone_type_type) != 101 ) {
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous devez être dans le tribunal pour utiliser cette commande.");
-		return Plugin_Handled;
-	}
-		
-	int amount = StringToInt(arg);
-
-	if( amount <= 0 ) {
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous ne pouvez pas donner une amende de moins de 0$.");
-		return Plugin_Handled;
-	}
-	if( amount > (rp_GetClientInt(target, i_Money)+rp_GetClientInt(target, i_Bank)) ) {
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Ce joueur n'a pas assez d'argent.");
-		return Plugin_Handled;
-	}
-
-	int maxAmount = 0;
-	switch( job ) {
-		case 101: maxAmount = 100000000;	// Président
-		case 102: maxAmount = 250000;		// Vice Président
-		case 103: maxAmount = 100000;		// Haut juge 2
-		case 104: maxAmount = 100000;		// Haut juge 1
-		case 105: maxAmount = 25000;		// Juge 2
-		case 106: maxAmount = 10000;		// Juge 1
-
-	}
-	if( amount > maxAmount ) {
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Amende trop élevée.");
-		return Plugin_Handled;
-	}
-
-	rp_SetJobCapital(101, ( rp_GetJobCapital(101) + (amount/4)*3 ) );
-
-	rp_SetClientStat(client, i_MoneyEarned_Sales, rp_GetClientStat(client, i_MoneyEarned_Sales) + (amount / 4));
-	rp_SetClientStat(client, i_MoneySpent_Fines, rp_GetClientStat(client, i_MoneySpent_Fines) + amount);
-	rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money) + (amount / 4));
-	rp_SetClientInt(target, i_Money, rp_GetClientInt(target, i_Money) - amount);
-	
-	rp_SetClientInt(target, i_LastAmende, amount);
-	rp_SetClientInt(target, i_LastAmendeBy, client);
-	
-	CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez pris une amende de %i$ à %N{default}.", amount, target);
-	CPrintToChat(target, "{lightblue}[TSX-RP]{default} %N {default} vous a prélevé %i$.", client, amount);
-
-	char SteamID[64], szTarget[64];
-		
-	GetClientAuthId(client, AuthId_Engine, SteamID, sizeof(SteamID), false);
-	GetClientAuthId(target, AuthId_Engine, szTarget, sizeof(szTarget), false);
-		
-	char szQuery[1024];
-	Format(szQuery, sizeof(szQuery), "INSERT INTO `rp_sell` (`id`, `steamid`, `job_id`, `timestamp`, `item_type`, `item_id`, `item_name`, `amount`) VALUES (NULL, '%s', '%i', '%i', '4', '%i', '%s', '%i');",
-	SteamID, rp_GetClientJobID(client), GetTime(), 0, "Amande", amount/4);
-
-	SQL_TQuery(rp_GetDatabase(), SQL_QueryCallBack, szQuery);
-
-	
-	LogToGame("[TSX-RP] [AMENDE] %N (%s) a pris %i$ a %N (%s).", client, SteamID, amount, target, szTarget);
-	rp_SetClientBool(client, b_MaySteal, false);
-	
-	CreateTimer(30.0, AllowStealing, client);
-	return Plugin_Handled;
-}
 public Action Cmd_Cop(int client) {
 	#if defined DEBUG
 	PrintToServer("Cmd_Cop");
@@ -333,9 +210,6 @@ public Action Cmd_Cop(int client) {
 		ACCESS_DENIED(client);
 	}
 	if( (job == 8 || job == 9) && rp_GetZoneInt(zone, zone_type_type) != 1 ) { // Gardien, policier dans le PDP
-		ACCESS_DENIED(client);
-	}
-	if( (job == 108 || job == 109) && rp_GetZoneInt(zone, zone_type_type) != 1 && rp_GetZoneInt(zone, zone_type_type) != 101 ) { // GOS, Marshall, ONU dans Tribunal
 		ACCESS_DENIED(client);
 	}
 	if( !rp_GetClientBool(client, b_MaySteal) || rp_GetClientBool(client, b_Stealing) ) { // Pendant un vol
@@ -384,7 +258,7 @@ public Action Cmd_Vis(int client) {
 	int zone = rp_GetPlayerZone(client);
 	int bit = rp_GetZoneBit(zone);
 		
-	if( bit & (BITZONE_BLOCKJAIL|BITZONE_JAIL|BITZONE_HAUTESECU|BITZONE_LACOURS) ) { // Flic ripoux
+	if( bit & (BITZONE_BLOCKJAIL|BITZONE_JAIL|BITZONE_HAUTESECU|BITZONE_LACOURS|BITZONE_PERQUIZ) ) { // Flic ripoux
 		ACCESS_DENIED(client);
 	}
 	if( rp_GetClientVehiclePassager(client) > 0 || Client_GetVehicle(client) > 0 || rp_GetClientInt(client, i_Sickness) ) { // En voiture, ou très malade
@@ -405,19 +279,19 @@ public Action Cmd_Vis(int client) {
 		ClientCommand(client, "r_screenoverlay effects/hsv.vmt");
 		
 		if( job  == 6 ) {
-			rp_SetClientFloat(client, fl_invisibleTime, GetGameTime() + 30.0);
+			rp_SetClientFloat(client, fl_invisibleTime, GetGameTime() + 60.0);
 			CreateTimer(120.0, AllowStealing, client);
 		}
 		else if ( job == 5 ) {
-			rp_SetClientFloat(client, fl_invisibleTime, GetGameTime() + 60.0);
+			rp_SetClientFloat(client, fl_invisibleTime, GetGameTime() + 90.0);
 			CreateTimer(120.0, AllowStealing, client);
 		}
 		else if ( job == 4 ) {
-			rp_SetClientFloat(client, fl_invisibleTime, GetGameTime() + 60.0);
+			rp_SetClientFloat(client, fl_invisibleTime, GetGameTime() + 90.0);
 			rp_SetClientBool(client, b_MaySteal, true);
 		}
 		else if (job == 1 ||  job== 2 ) {
-			rp_SetClientFloat(client, fl_invisibleTime, GetGameTime() + 90.0);
+			rp_SetClientFloat(client, fl_invisibleTime, GetGameTime() + 120.0);
 			rp_SetClientBool(client, b_MaySteal, true);
 		}
 		
@@ -512,11 +386,8 @@ public Action Cmd_Tazer(int client) {
 				case 5:		time = 6.0;
 				case 6:		time = 7.0;
 				case 7:		time = 8.0;
-				case 107:	time = 8.0;
 				case 8:		time = 9.0;
-				case 108:	time = 9.0;
 				case 9:		time = 10.0;
-				case 109:	time = 10.0;
 				
 				default: time = 10.0;
 		}
@@ -651,9 +522,8 @@ public Action Cmd_Tazer(int client) {
 			rp_Effect_PropExplode(target, true);
 			AcceptEntityInput(target, "Kill");
 			
-			rp_SetClientInt(client, i_AddToPay, rp_GetClientInt(client, i_AddToPay) + reward);
+			rp_ClientMoney(client, i_AddToPay, reward);
 			rp_SetJobCapital(1, rp_GetJobCapital(1) + reward*2);
-						
 				
 			GetClientAuthId(client, AuthId_Engine, tmp, sizeof(tmp), false);
 			Format(szQuery, sizeof(szQuery), "INSERT INTO `rp_sell` (`id`, `steamid`, `job_id`, `timestamp`, `item_type`, `item_id`, `item_name`, `amount`) VALUES (NULL, '%s', '%i', '%i', '3', '%i', '%s', '%i');",
@@ -701,26 +571,30 @@ public Action Cmd_Jail(int client) {
 	if( rp_GetClientJobID(client) != 1 && rp_GetClientJobID(client) != 101 ) {
 		ACCESS_DENIED(client);
 	}	
-	if( GetClientTeam(client) == CS_TEAM_T && ((job == 8 || job == 9) || (job >= 107 && job <= 109 )) ) {
+	if( GetClientTeam(client) == CS_TEAM_T && ((job == 8 || job == 9) || (job >= 101 && job <= 109 )) ) {
 		ACCESS_DENIED(client);
 	}
 	
 	float time = GetGameTime();
+	int ct = 0;
 		
 	for(int i=1; i<=MaxClients; i++) {
-		if( !IsValidClient(i) || IsPlayerAlive(i) )
+		if( !IsValidClient(i) || IsClientSourceTV(i) )
 			continue;
-		if( IsClientSourceTV(i) )
-			continue;
-		if( rp_GetClientFloat(i, fl_RespawnTime) > time )
-			continue;
+		if( rp_GetClientJobID(i) == 1 )
+			ct++;
 		
-		int ragdoll = GetEntPropEnt(i, Prop_Send, "m_hRagdoll");
-
-		if( !IsValidEdict(ragdoll) || !IsValidEntity(ragdoll) )
-			ragdoll = i;
-		if( Entity_GetDistance(client, ragdoll) < MAX_AREA_DIST ) {
-			CS_RespawnPlayer(i);
+		if( Entity_GetDistance(client, i) < MAX_AREA_DIST ) {
+			if( !IsPlayerAlive(i) && rp_GetClientFloat(i, fl_RespawnTime) < time )
+				CS_RespawnPlayer(i);
+			if( rp_GetClientJobID(i) == 1 )
+				ct += 10;
+		}
+	}
+	
+	if( rp_GetClientJobID(client) == 101 ) {
+		if( ct >= 3 && rp_GetZoneInt( rp_GetPlayerZone(client), zone_type_type) != 101 ) {
+			ACCESS_DENIED(client);
 		}
 	}
 	
@@ -758,68 +632,6 @@ public Action Cmd_Jail(int client) {
 	if( Cbit & BITZONE_BLOCKJAIL || Tbit & BITZONE_BLOCKJAIL ) {
 		ACCESS_DENIED(client);
 	}
-	
-	if( (rp_GetZoneInt(Czone, zone_type_type) == 101) // On check si le CT est bien dans le tribunal
-			&& (job >= 101 && job <= 106) ) {
-
-		if (rp_GetZoneInt(Tzone, zone_type_type) != 101){ // On check si la cible est bien dans le tribunal (ticket #1029)
-			ACCESS_DENIED(client);
-		}
-
-		if(job == 106 && GetClientTeam(target) == CS_TEAM_CT ){
-			ACCESS_DENIED(client);
-		}
-		if( !IsValidClient(target) ) {
-			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous devez viser un joueur.");
-			return Plugin_Handled;
-		}
-
-		int maxAmount = 0;
-		switch( job ) {
-			case 101: maxAmount = 1000;		// Président
-			case 102: maxAmount = 300;		// Vice Président
-			case 103: maxAmount = 100;		// Haut juge 2
-			case 104: maxAmount = 100;		// Haut juge 1
-			case 105: maxAmount = 36;		// Juge 2
-			case 106: maxAmount = 24;		// Juge 1
-		}
-
-		// Setup menu
-		Handle menu = CreateMenu(eventAskJail2Time);
-		char tmp[256], tmp2[256];
-		Format(tmp, 255, "Combien de temps doit rester %N?\n ", target);
-		SetMenuTitle(menu, tmp);
-
-		Format(tmp, 255, "%i_-1", target);
-		AddMenuItem(menu, tmp, "Prédéfinie");
-
-		for(int i=6; i<=600; i += 6) {
-
-			if( i > maxAmount )
-				break;
-
-			Format(tmp, 255, "%i_%i", target, i);
-			Format(tmp2, 255, "%i Heures", i);
-
-			AddMenuItem(menu, tmp, tmp2);
-		}
-
-		if(job == 104 || job == 103 || job == 101){
-			Format(tmp, 255, "%i_%i", target, maxAmount);
-			Format(tmp2, 255, "%i Heures", maxAmount);
-
-			AddMenuItem(menu, tmp, tmp2);
-		}
-
-		SetMenuExitButton(menu, true);
-		DisplayMenu(menu, client, MENU_TIME_DURATION);
-			
-		
-		return Plugin_Handled;
-	}
-	else if( (job >= 103 && job <= 106) && (rp_GetZoneInt(Czone, zone_type_type) != 101 || rp_GetZoneInt(Czone, zone_type_type) != 1)) {
-		ACCESS_DENIED(client);
-	}
 
 	if( rp_IsValidVehicle(target) ) {
 		int client2 = GetEntPropEnt(target, Prop_Send, "m_hPlayer");
@@ -853,7 +665,7 @@ public Action Cmd_Jail(int client) {
 		return Plugin_Handled;
 	}
 	
-	if( GetClientTeam(target) == CS_TEAM_CT && !(job >= 101 && job <= 103 ) ) {
+	if( GetClientTeam(target) == CS_TEAM_CT ) {
 		ACCESS_DENIED(client);
 	}
 	
@@ -868,35 +680,6 @@ public Action Cmd_Jail(int client) {
 	SendPlayerToJail(target, client);
 	// g_iUserMission[target][mission_type] = -1; 
 	
-	return Plugin_Handled;
-}
-public Action Cmd_Mandat(int client) {
-	#if defined DEBUG
-	PrintToServer("Cmd_Mandat");
-	#endif
-	int job = rp_GetClientInt(client, i_Job);
-		
-	if( job != 101 && job != 102 && job != 103 && job != 104 && job != 105 && job != 106 ) {
-		ACCESS_DENIED(client);
-	}
-	int target = rp_GetClientTarget(client);
-	if( target <= 0 || !IsValidEdict(target) || !IsValidEntity(target) )
-		return Plugin_Handled;
-	
-	if( rp_GetClientJobID(target) != 1 && rp_GetClientJobID(target) != 101 ) {
-		ACCESS_DENIED(client);
-	}
-	
-	if(!IsValidClient(target)){	
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous devez viser un joueur.");
-		return Plugin_Handled;
-	}
-	
-	if( rp_GetClientItem(target, ITEM_MANDAT) < 10 ) {
-		rp_ClientGiveItem(target, ITEM_MANDAT);
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez donné un mandat à: %N", target);
-		CPrintToChat(target, "{lightblue}[TSX-RP]{default} Vous avez reçu un mandat de: %N", client);
-	}
 	return Plugin_Handled;
 }
 public Action Cmd_Push(int client) {
@@ -952,26 +735,6 @@ public Action Cmd_Push(int client) {
 	
 	return Plugin_Handled;
 }
-public Action Cmd_Audience(int client) {
-	#if defined DEBUG
-	PrintToServer("Cmd_Audience");
-	#endif
-	int job = rp_GetClientInt(client, i_Job);
-		
-	if( job != 101 && job != 102 && job != 103 && job != 104 && job != 105 && job != 106 ) {
-		ACCESS_DENIED(client);
-	}
-	
-	char tmp[2048], tmp2[128];
-	rp_GetJobData(job, job_type_name, tmp2, sizeof(tmp2));
-	Format(tmp, sizeof(tmp), "https://www.ts-x.eu/popup.php?url=https://docs.google.com/forms/d/1u4PFUsNBtVphggSyF3McU0gkA_o-6jEMSk0qmp0epFU/viewform?entry.249878658=%N%20-%20%s",
-	client, tmp2);
-		
-		
-	QueryClientConVar(client, "cl_disablehtmlmotd", view_as<ConVarQueryFinished>(ClientConVar), client);
-	AdvMOTD_ShowMOTDPanel(client, "Role-Play: Audience", tmp, MOTDPANEL_TYPE_URL);
-	return Plugin_Handled;
-}
 public void ClientConVar(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue) {
 	#if defined DEBUG
 	PrintToServer("ClientConVar");
@@ -980,631 +743,6 @@ public void ClientConVar(QueryCookie cookie, int client, ConVarQueryResult resul
 		if( StrEqual(cvarValue, "0") == false ) {
 			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Des problèmes d'affichage ? Entrez cl_disablehtmlmotd 0 dans votre console puis relancez CS:GO.");
 		}
-	}
-}
-// ----------------------------------------------------------------------------
-public Action Cmd_Jugement(int client, int args) {
-	#if defined DEBUG
-	PrintToServer("Cmd_Jugement");
-	#endif
-	int amende = 0;
-	char arg1[12];
-
-	if(StringToInt(g_szTribunal_DATA[client][tribunal_duration]) > 0){
-		amende = GetCmdArgInt(1);
-		GetCmdArg(2, arg1, sizeof(arg1));
-	}
-	else{
-		GetCmdArg(1, arg1, sizeof(arg1));
-	}
-	
-	int job = rp_GetClientInt(client, i_Job);
-	char random[6];
-	
-	if( job != 101 && job != 102 && job != 103 && job != 104 ) {
-		ACCESS_DENIED(client);
-	}
-	
-	Handle DB = rp_GetDatabase();
-	
-	if( StrEqual(g_szTribunal_DATA[client][tribunal_code], arg1, false) ) {
-		if( StrEqual(g_szTribunal_DATA[client][tribunal_option], "unknown") ) {
-			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Erreur: Pas de jugement en cours.");
-			return Plugin_Handled;
-		}
-
-		char SteamID[64], UserName[64];
-
-		GetClientAuthId(client, AuthId_Engine, SteamID, sizeof(SteamID), false);
-		GetClientName(client,UserName,63);
-
-		char szReason[128], tmp[64];
-
-		if(StringToInt(g_szTribunal_DATA[client][tribunal_duration]) > 0){
-			for(int i=3; i<=args; i++) {
-				GetCmdArg(i, tmp, sizeof(tmp));
-				Format(szReason, sizeof(szReason), "%s%s ", szReason, tmp);
-			}
-		}
-		else{
-			for(int i=2; i<=args; i++) {
-				GetCmdArg(i, tmp, sizeof(tmp));
-				Format(szReason, sizeof(szReason), "%s%s ", szReason, tmp);
-			}
-		}
-
-		char buffer_name[ sizeof(UserName)*2+1 ];
-		SQL_EscapeString(DB, UserName, buffer_name, sizeof(buffer_name));
-		
-		char buffer_reason[ sizeof(szReason)*2+1 ];
-		SQL_EscapeString(DB, szReason, buffer_reason, sizeof(buffer_reason));
-		
-		char szQuery[2048];
-		if( StringToInt(g_szTribunal_DATA[client][tribunal_duration]) > 0 ) {
-
-			if(amende >= 1){
-				int maxAmount;
-				switch( job ) {
-					case 101: maxAmount = 1000000;		// Président
-					case 102: maxAmount = 300000;		// Vice Président
-					case 103: maxAmount = 100000;		// Haut juge 2
-					case 104: maxAmount = 100000;		// Haut juge 1
-				}
-
-				if(amende > maxAmount){
-					CPrintToChat(client, "{lightblue}[TSX-RP]{default} L'amende excède le montant maximum autorisé.");
-					String_GetRandom(random, sizeof(random), sizeof(random) - 1, "23456789abcdefg");
-
-					Format(g_szTribunal_DATA[client][tribunal_code], 63, random);
-					Format(g_szTribunal_DATA[client][tribunal_option], 63, "unknown");
-
-					return Plugin_Handled;
-				}
-				int playermoney=-1;
-
-				SQL_LockDatabase( DB );
-				Format(szQuery, sizeof(szQuery), "SELECT (`money`+`bank`) FROM  `rp_users` WHERE `steamid`='%s';", g_szTribunal_DATA[client][tribunal_steamid]);
-				Handle row = SQL_Query(DB, szQuery);
-				if( row != INVALID_HANDLE ) {
-					if( SQL_FetchRow(row) ) {
-						playermoney=SQL_FetchInt(row, 0);
-					}
-				}
-				SQL_UnlockDatabase( DB );
-
-				if(playermoney == -1){
-					PrintToServer("Erreur SQL: Impossible de relever l'argent du joueur (Amende jugement)");
-					CPrintToChat(client, "{lightblue}[TSX-RP]{default} Erreur: Impossible de relever l'argent du joueur.", playermoney);
-					String_GetRandom(random, sizeof(random), sizeof(random) - 1, "23456789abcdefg");
-
-					Format(g_szTribunal_DATA[client][tribunal_code], 63, random);
-					Format(g_szTribunal_DATA[client][tribunal_option], 63, "unknown");
-
-					return Plugin_Handled;
-				}
-				else if(amende > playermoney){
-					CPrintToChat(client, "{lightblue}[TSX-RP]{default} Le joueur n'a que %i$, le jugement a été annulé.", playermoney);
-					String_GetRandom(random, sizeof(random), sizeof(random) - 1, "23456789abcdefg");
-
-					Format(g_szTribunal_DATA[client][tribunal_code], 63, random);
-					Format(g_szTribunal_DATA[client][tribunal_option], 63, "unknown");
-
-					return Plugin_Handled;
-				}
-
-				rp_SetJobCapital(101, rp_GetJobCapital(101) + (amende/4 * 3));
-				rp_SetClientInt(client, i_AddToPay, rp_GetClientInt(client, i_AddToPay) + (amende / 4));
-			}
-			else{
-				amende = 0;
-			}
-
-
-			Format(szQuery, sizeof(szQuery), "INSERT INTO `rp_users2` (`id`, `steamid`, `jail`, `pseudo`, `steamid2`, `raison`, `money`) VALUES", szQuery);
-			Format(szQuery, sizeof(szQuery), "%s (NULL, '%s', '%i', '%s', '%s', '%s', '-%i');", 
-				szQuery,
-				g_szTribunal_DATA[client][tribunal_steamid],
-				StringToInt(g_szTribunal_DATA[client][tribunal_duration])*60,
-				buffer_name,
-				SteamID,
-				buffer_reason,
-				amende
-			);
-
-			SQL_TQuery(DB, SQL_QueryCallBack, szQuery);
-
-			LogToGame("[TSX-RP] [TRIBUNAL-FORUM] le juge %L a condamné %s à faire %s heures de prison et à payer %i$ pour %s.",
-				client,
-				g_szTribunal_DATA[client][tribunal_steamid],
-				g_szTribunal_DATA[client][tribunal_duration],
-				amende,
-				szReason
-			);
-
-			CPrintToChatAll("{lightblue}[TSX-RP]{default} Le juge %N a condamné %s à faire %s heures de prison et à payer %i$ pour %s.",
-				client,
-				g_szTribunal_DATA[client][tribunal_steamid],
-				g_szTribunal_DATA[client][tribunal_duration],
-				amende,
-				szReason
-			);
-		}
-		else{
-			LogToGame("[TSX-RP] [TRIBUNAL-FORUM] le juge %L a acquitté %s pour %s.",
-				client, g_szTribunal_DATA[client][tribunal_steamid], szReason);
-
-			CPrintToChatAll("{lightblue}[TSX-RP]{default} Le juge %N a acquitté %s pour %s.",
-				client, g_szTribunal_DATA[client][tribunal_steamid], szReason);
-		}
-
-		if( StrEqual(g_szTribunal_DATA[client][tribunal_option], "forum") ) {
-			
-			char reason[sizeof(szReason) * 2 + 1];
-			SQL_EscapeString(rp_GetDatabase(), szReason, reason, sizeof(reason));
-			
-			Format(szQuery, sizeof(szQuery), "UPDATE `ts-x`.`site_report` SET `jail`='%s', `amende`='%d', `juge`='%s', `reason`='%s' WHERE `id`='%s';",
-				g_szTribunal_DATA[client][tribunal_duration], amende, SteamID, reason, g_szTribunal_DATA[client][tribunal_uniqID]);
-			SQL_TQuery(DB, SQL_QueryCallBack, szQuery);
-		}
-		
-	}
-	else{
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Le code est incorrect, le jugement a été annulé.");
-	}
-	
-	String_GetRandom(random, sizeof(random), sizeof(random) - 1, "23456789abcdefg");
-	
-	Format(g_szTribunal_DATA[client][tribunal_code], 63, random);
-	Format(g_szTribunal_DATA[client][tribunal_option], 63, "unknown");
-	
-	return Plugin_Handled;
-}
-// ----------------------------------------------------------------------------
-public Action Cmd_Conv(int client) {
-	#if defined DEBUG
-	PrintToServer("Cmd_Conv");
-	#endif
-	int job = rp_GetClientInt(client, i_Job);
-		
-	if( rp_GetClientJobID(client) != 101 ) {
-		ACCESS_DENIED(client);
-	}
-	if( job >= 107 && job <= 109 ) {
-		ACCESS_DENIED(client);
-	}
-
-	// Setup menu
-	Handle menu = CreateMenu(eventConvocation);
-	SetMenuTitle(menu, "Liste des joueurs\n ");
-	char tmp[24], tmp2[64];
-
-	for(int i=1; i<=MaxClients; i++) {
-		if( !IsValidClient(i) )
-			continue;
-
-		Format(tmp, sizeof(tmp), "%i", i);
-		if(rp_IsClientNew(i))
-			Format(tmp2, sizeof(tmp2), "[NEW] %N", i);
-		else
-			Format(tmp2, sizeof(tmp2), "%N", i);
-
-		AddMenuItem(menu, tmp, tmp2);
-	}
-
-	SetMenuExitButton(menu, true);
-	DisplayMenu(menu, client, MENU_TIME_DURATION);
-
-	return Plugin_Handled;
-}
-public int eventConvocation(Handle menu, MenuAction action, int client, int param2) {
-	#if defined DEBUG
-	PrintToServer("eventConvocation");
-	#endif
-	if( action == MenuAction_Select ) {
-		char options[128];
-		GetMenuItem(menu, param2, options, sizeof(options));
-		int target = StringToInt(options);
-
-		// Setup menu
-		Handle menu2 = CreateMenu(eventConvocation_2);
-		Format(options, sizeof(options), "Que faire pour %N\n ", target);
-		SetMenuTitle(menu2, options);
-		if(g_TribunalSearch[target][tribunal_search_status] == -1){
-			Format(options, sizeof(options), "%i_1", target);
-			AddMenuItem(menu2, options, "Lancer la convocation");
-			
-			Format(options, sizeof(options), "%i_-1", target);
-			AddMenuItem(menu2, options, "Anuler la convocation", ITEMDRAW_DISABLED);
-
-			Format(options, sizeof(options), "%i_4", target);
-			AddMenuItem(menu2, options, "Forcer la recherche");
-		}
-		else{
-			Format(options, sizeof(options), "%i_1", target);
-			AddMenuItem(menu2, options, "Lancer la convocation", ITEMDRAW_DISABLED);
-			
-			Format(options, sizeof(options), "%i_-1", target);
-			AddMenuItem(menu2, options, "Anuler la convocation");
-
-			Format(options, sizeof(options), "%i_4", target);
-			AddMenuItem(menu2, options, "Forcer la recherche", ITEMDRAW_DISABLED);
-		}
-		
-		SetMenuExitButton(menu2, true);
-		DisplayMenu(menu2, client, 60);
-	}
-	else if( action == MenuAction_End ) {
-		CloseHandle(menu);
-	}
-}
-public int eventConvocation_2(Handle menu, MenuAction action, int client, int param2) {
-	#if defined DEBUG
-	PrintToServer("eventConvocation_2");
-	#endif
-	if( action == MenuAction_Select ) {
-
-		char options[64], optionsBuff[2][64];
-		GetMenuItem(menu, param2, options, sizeof(options));
-		
-		ExplodeString(options, "_", optionsBuff, sizeof(optionsBuff), sizeof(optionsBuff[]));
-		
-		int target = StringToInt(optionsBuff[0]);
-		int etat = StringToInt(optionsBuff[1]);
-		rp_GetZoneData(rp_GetPlayerZone(client), zone_type_name, options, sizeof(options));
-		
-		if( etat == -1 ) {
-			PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-			PrintToChatPoliceSearch(target, "{lightblue}[TSX-RP] [TRIBUNAL]{default} %N {default}n'est plus recherché par le Tribunal.", target);
-			PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-			g_TribunalSearch[target][tribunal_search_status] = -1;
-			PrintToChatPoliceSearch(target, "{lightblue}[TSX-RP]{default} La recherche sur le joueur %N à durée %.1f minutes.", target, (GetTime()-g_TribunalSearch[target][tribunal_search_starttime])/60.0);
-			LogToGame("[TSX-RP] [RECHERCHE] %L a mis fin à la convocation de %L.", client, target);
-			rp_SetClientBool(target, b_IsSearchByTribunal, false);
-
-		}
-		else if( etat == 1 ) {
-			g_TribunalSearch[target][tribunal_search_status] = 1;
-			g_TribunalSearch[target][tribunal_search_starttime] = GetTime();
-			g_TribunalSearch[target][tribunal_search_where] = FindCharInString(options,'1') != -1 ? 1 : 2;
-			PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-			PrintToChatPoliceSearch(target, "{lightblue}[TSX-RP] [TRIBUNAL]{default} %N {default}est convoqué dans le Tribunal N°%i. [%i/3]", target, g_TribunalSearch[target][tribunal_search_where], etat);
-			PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-			LogToGame("[TSX-RP] [RECHERCHE] %L convoqué %L au tribunal n°%i.", client, target, g_TribunalSearch[target][tribunal_search_where]);
-			CreateTimer(30.0, Timer_ConvTribu, target, TIMER_REPEAT);
-			rp_SetClientBool(target, b_IsSearchByTribunal, true);
-		}
-		else if( etat == 4 ) {
-			g_TribunalSearch[target][tribunal_search_status] = 4;
-			g_TribunalSearch[target][tribunal_search_starttime] = GetTime();
-			g_TribunalSearch[target][tribunal_search_where] = FindCharInString(options,'1') != -1 ? 1 : 2;
-			PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-			PrintToChatPoliceSearch(target, "{lightblue}[TSX-RP] [TRIBUNAL]{default} %N {default}est recherché par le Tribunal.", target);
-			PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-			LogToGame("[TSX-RP] [RECHERCHE] %L a lancé une recherche sur %L", client, target);
-			CreateTimer(60.0, Timer_ConvTribu, target, TIMER_REPEAT);
-			rp_SetClientBool(target, b_IsSearchByTribunal, true);
-		}
-	}
-	else if( action == MenuAction_End ) {
-		CloseHandle(menu);
-	}
-}
-public Action Timer_ConvTribu(Handle timer, any target) {
-	if(!IsValidClient(target) || g_TribunalSearch[target][tribunal_search_status] == -1){
-		return Plugin_Stop;
-	}
-	float vecOrigin[3];
-	Entity_GetAbsOrigin(target, vecOrigin);
-	if( rp_GetPlayerZone(target) == 288 || rp_GetPlayerZone(target) == 287 ){
-		PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-		PrintToChatPoliceSearch(target, "{lightblue}[TSX-RP] [TRIBUNAL]{default} %N {default}n'est plus recherché par le Tribunal.", target);
-		PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-		g_TribunalSearch[target][tribunal_search_status] = -1;
-		LogToGame("[TSX-RP] [RECHERCHE] %L a été détecté comme présent au tribunal.", target);
-		PrintToChatZone(rp_GetPlayerZone(target), "{lightblue}[TSX-RP]{default} La recherche sur le joueur %N a durée %.1f minutes.", target, (GetTime()-g_TribunalSearch[target][tribunal_search_starttime])/60.0);
-		rp_SetClientBool(target, b_IsSearchByTribunal, false);
-		return Plugin_Stop;
-	}
-	g_TribunalSearch[target][tribunal_search_status]++;
-	if(g_TribunalSearch[target][tribunal_search_status] > 3){
-		PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-		PrintToChatPoliceSearch(target, "{lightblue}[TSX-RP] [TRIBUNAL]{default} %N {default}est recherché par le Tribunal.", target);
-		PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-	}
-	else if(g_TribunalSearch[target][tribunal_search_status] == 4){
-		PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-		PrintToChatPoliceSearch(target, "{lightblue}[TSX-RP] [TRIBUNAL]{default} %N {default}est convoqué dans le Tribunal N°%i. [%i/3]", target, g_TribunalSearch[target][tribunal_search_where], g_TribunalSearch[target][tribunal_search_status]);
-		PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-		CreateTimer(60.0, Timer_ConvTribu, target, TIMER_REPEAT);
-		return Plugin_Stop;
-	}
-	else{
-		PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-		PrintToChatPoliceSearch(target, "{lightblue}[TSX-RP] [TRIBUNAL]{default} %N {default}est convoqué dans le Tribunal N°%i. [%i/3]", target, g_TribunalSearch[target][tribunal_search_where], g_TribunalSearch[target][tribunal_search_status]);
-		PrintToChatPoliceSearch(target, "{lightblue} ================================== {default}");
-	}
-	return Plugin_Continue;
-}
-// ----------------------------------------------------------------------------
-public Action Cmd_Tribunal(int client) {
-	#if defined DEBUG
-	PrintToServer("Cmd_Tribunal");
-	#endif
-	int job = rp_GetClientInt(client, i_Job);
-		
-	if( job != 1 && job != 2 && job != 101 && job != 102 && job != 103 && job != 104 && job != 105 && job != 106 ) {
-		ACCESS_DENIED(client);
-	}
-	if( rp_GetZoneInt( rp_GetPlayerZone(client), zone_type_type) != 101 ) {
-		ACCESS_DENIED(client);
-	}
-	
-	// Setup menu
-	Handle menu = CreateMenu(MenuTribunal_main);
-
-	SetMenuTitle(menu, "  Tribunal\n ");
-
-	if( job >= 101 && job <= 104 ) {
-		if( GetConVarInt(FindConVar("hostport")) == 27015 )
-			AddMenuItem(menu, "forum",		"Juger les cas du forum");
-		else
-			AddMenuItem(menu, "forum", "Juger les cas du forum", ITEMDRAW_DISABLED);
-			
-		AddMenuItem(menu, "connected",	"Juger un joueur présent");
-		AddMenuItem(menu, "disconnect",	"Juger un joueur récemment déconnecté");
-	}
-	if( GetConVarInt(FindConVar("hostport")) == 27015 )
-		AddMenuItem(menu, "stats",		"Voir les stats d'un joueur");
-	else
-		AddMenuItem(menu, "stats", 	"Voir les stats d'un joueur", ITEMDRAW_DISABLED);
-
-	SetMenuExitButton(menu, true);
-	DisplayMenu(menu, client, MENU_TIME_DURATION);
-
-	return Plugin_Handled;
-}
-public int MenuTribunal_main(Handle p_hItemMenu, MenuAction p_oAction, int client, int p_iParam2) {
-	#if defined DEBUG
-	PrintToServer("MenuTribunal_main");
-	#endif
-	if( p_oAction == MenuAction_Select && client != 0) {
-		char options[64];
-		GetMenuItem(p_hItemMenu, p_iParam2, options, 63);
-		
-		Handle menu = CreateMenu(MenuTribunal_selectplayer);
-		Handle DB = rp_GetDatabase();
-		
-		if( StrEqual( options, "forum", false) ) {
-			
-			SetMenuTitle(menu, "  Tribunal - Cas Forum\n ");
-			PrintToServer("LOCK-2");
-			SQL_LockDatabase(DB);
-			
-			char szQuery[1024], szSteamID[32];
-			GetClientAuthId(client, AuthId_Engine, szSteamID, sizeof(szSteamID));
-			
-			Format(szQuery, sizeof(szQuery), "SELECT R.`id`, `report_steamid`, COUNT(`vote`) vote FROM `ts-x`.`site_report` R");
-			Format(szQuery, sizeof(szQuery), "%s LEFT JOIN `ts-x`.`site_report_votes` V ON V.`reportid`=R.`id`", szQuery);
-			Format(szQuery, sizeof(szQuery), "%s WHERE V.`vote`='1' AND R.`jail`=-1 AND R.`own_steamid`<>'%s' AND R.`report_steamid`<>'%s' GROUP BY R.`id` ORDER BY vote DESC;", szQuery, szSteamID, szSteamID);
-			
-			Handle hQuery = SQL_Query(DB, szQuery);
-			
-			if( hQuery != INVALID_HANDLE ) {
-				while( SQL_FetchRow(hQuery) ) {
-					
-					char tmp[255], tmp2[255], szSteam[32];
-					int id = SQL_FetchInt(hQuery, 0);
-					SQL_FetchString(hQuery, 1, szSteam, sizeof(szSteam));
-					int count=SQL_FetchInt(hQuery, 2);
-					
-					Format(tmp, sizeof(tmp), "%s %s %d", options, szSteam, id);
-					
-					Format(tmp2, sizeof(tmp2), "[%i] %s", count, szSteam);
-					AddMenuItem(menu, tmp, tmp2);
-				}
-			}
-			
-			if( hQuery != INVALID_HANDLE )
-				CloseHandle(hQuery);
-			
-			SQL_UnlockDatabase(DB);
-			PrintToServer("UNLOCK-2");
-		}
-		else if( StrEqual( options, "connected", false) ) {
-			
-			SetMenuTitle(menu, "  Tribunal - Cas connecté\n ");
-			char tmp[255], tmp2[255], szSteam[32];
-			
-			for(int i = 1; i <= MaxClients; i++) {
-				if( !IsValidClient(i) )
-					continue;
-				
-				if( rp_GetZoneInt( rp_GetPlayerZone(i), zone_type_type) != 101 ) 
-					continue;				
-				
-				GetClientAuthId(i, AuthId_Engine, szSteam, sizeof(szSteam), false);
-				Format(tmp, sizeof(tmp), "%s %s %s", options, szSteam, szSteam);
-				
-				Format(tmp2, sizeof(tmp2), "%N - %s", i, szSteam);
-				AddMenuItem(menu, tmp, tmp2);
-			}
-		}
-		else if( StrEqual( options, "disconnect", false) ) {
-			
-			SetMenuTitle(menu, "  Tribunal - Cas déconnecté\n ");
-			PrintToServer("LOCK-3");
-			SQL_LockDatabase(DB);
-			Handle hQuery = SQL_Query(DB, "SELECT `steamid`, `name` FROM `rp_users` ORDER BY `rp_users`.`last_connected` DESC LIMIT 100;");
-			char tmp[255], tmp2[255], szSteam[32], buffer_szSteam[32];
-			
-			if( hQuery != INVALID_HANDLE ) {
-				while( SQL_FetchRow(hQuery) ) {
-				
-					SQL_FetchString(hQuery, 0, szSteam, sizeof(szSteam));
-					SQL_FetchString(hQuery, 1, tmp2, sizeof(tmp2));
-					
-					bool found = false;
-					for(int i = 1; i <= MaxClients; i++) {
-						if( !IsValidClient(i) )
-							continue;
-						
-						
-						GetClientAuthId(i, AuthId_Engine, buffer_szSteam, sizeof(buffer_szSteam), false);
-						
-						if( StrEqual(szSteam, buffer_szSteam) ) {
-							found = true;
-							break;
-						}
-					}
-					
-					if( found )
-						continue;
-					
-					Format(tmp, sizeof(tmp), "%s %s %s", options, szSteam, szSteam);
-					Format(tmp2, sizeof(tmp2), "%s - %s", tmp2, szSteam);
-					AddMenuItem(menu, tmp, tmp2);
-				}
-			}
-			
-			if( hQuery != INVALID_HANDLE )
-				CloseHandle(hQuery);
-			SQL_UnlockDatabase(DB);
-			PrintToServer("UNLOCK-3");
-		}
-		else if( StrEqual( options, "stats", false) ) {
-			
-			SetMenuTitle(menu, "  Tribunal - Stats joueur\n ");
-			char tmp[255], tmp2[255], szSteam[32];
-			
-			for(int i = 1; i <= MaxClients; i++) {
-				if( !IsValidClient(i) )
-					continue;
-				
-				if( rp_GetZoneInt( rp_GetPlayerZone(i), zone_type_type) != 101 ) 
-					continue;
-				
-				GetClientAuthId(i, AuthId_Engine, szSteam, sizeof(szSteam), false);
-				
-				Format(tmp, sizeof(tmp), "%s %s %s", options, szSteam, szSteam);
-				
-				Format(tmp2, sizeof(tmp2), "%N - %s", i, szSteam);
-				AddMenuItem(menu, tmp, tmp2);
-			}
-		}
-		
-		SetMenuExitButton(menu, true);
-		DisplayMenu(menu, client, MENU_TIME_DURATION);
-	}
-	else if( p_oAction == MenuAction_End ) {
-		
-		CloseHandle(p_hItemMenu);
-	}
-}
-public int MenuTribunal_selectplayer(Handle p_hItemMenu, MenuAction p_oAction, int client, int p_iParam2) {
-	#if defined DEBUG
-	PrintToServer("MenuTribunal_selectplayer");
-	#endif
-	if( p_oAction == MenuAction_Select && client != 0) {
-		char buff_options[255], options[3][64], tmp[255], tmp2[255], szTitle[128], szURL[512];
-		GetMenuItem(p_hItemMenu, p_iParam2, buff_options, 254);
-		ExplodeString(buff_options, " ", options, sizeof(options), sizeof(options[]));
-		
-		Format(szTitle, sizeof(szTitle), "Tribunal: %s", options[1]);
-		Format(szURL, sizeof(szURL), "https://www.ts-x.eu/popup.php?url=/index.php?page=roleplay2&sharp=/tribunal/case/%s", options[2]);
-		
-		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Si la page ne s'ouvre pas, un lien est disponible dans votre console.");
-		PrintToConsole(client, "https://www.ts-x.eu/index.php?page=roleplay2#/tribunal/case/%s", options[2]);
-		
-		AdvMOTD_ShowMOTDPanel(client, szTitle, szURL, MOTDPANEL_TYPE_URL);
-		
-		if( !StrEqual(options[0], "stats") ) {
-			
-			Handle menu = CreateMenu(MenuTribunal_Apply);
-			SetMenuTitle(menu, "  Tribunal - Sélection de la peine\n ");
-			
-			for(int i=0; i<=100; i+=2) {
-				Format(tmp, sizeof(tmp), "%s %s %s %i", options[0], options[1], options[2], i);
-				Format(tmp2, sizeof(tmp2), "%i heures", i);
-				AddMenuItem(menu, tmp, tmp2);
-			}
-			
-			SetMenuExitButton(menu, true);
-			DisplayMenu(menu, client, MENU_TIME_DURATION*2*10);
-		}
-	}
-	else if( p_oAction == MenuAction_End ) {
-		
-		CloseHandle(p_hItemMenu);
-	}
-	
-}
-public int MenuTribunal_Apply(Handle p_hItemMenu, MenuAction p_oAction, int client, int p_iParam2) {
-	#if defined DEBUG
-	PrintToServer("MenuTribunal_Apply");
-	#endif
-	if( p_oAction == MenuAction_Select && client != 0) {
-		char buff_options[255], options[4][64];
-		GetMenuItem(p_hItemMenu, p_iParam2, buff_options, 254);
-		
-		ExplodeString(buff_options, " ", options, sizeof(options), sizeof(options[]));
-		
-		char random[6];
-		String_GetRandom(random, sizeof(random), sizeof(random) - 1, "23456789abcdefg");
-		
-		strcopy(g_szTribunal_DATA[client][tribunal_option], 63, options[0]);
-		strcopy(g_szTribunal_DATA[client][tribunal_steamid], 63, options[1]);
-		strcopy(g_szTribunal_DATA[client][tribunal_uniqID], 63, options[2]);
-		strcopy(g_szTribunal_DATA[client][tribunal_duration], 63, options[3]);
-		strcopy(g_szTribunal_DATA[client][tribunal_code], 63, random);
-		if(StringToInt(g_szTribunal_DATA[client][tribunal_duration]) > 0)
-			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Afin de confirmer votre jugement, tappez maintenant /jugement amende %s raison", random);
-		else
-			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Afin de confirmer votre jugement, tappez maintenant /jugement %s raison", random);
-	}
-	else if( p_oAction == MenuAction_End ) {
-		
-		CloseHandle(p_hItemMenu);
-	}
-}
-public int MenuTribunal(Handle p_hItemMenu, MenuAction p_oAction, int client, int p_iParam2) {
-	#if defined DEBUG
-	PrintToServer("MenuTribunal");
-	#endif
-	if (p_oAction == MenuAction_Select) {
-		
-		char szMenuItem[64];
-		if( GetMenuItem(p_hItemMenu, p_iParam2, szMenuItem, sizeof(szMenuItem)) ) {
-			
-			int target = StringToInt(szMenuItem);
-			if( !IsValidClient(target) ) {
-				CPrintToChat(client, "{lightblue}[TSX-RP]{default} Le joueur s'est déconnecté.");
-				return;
-			}
-			
-			char uniqID[64], szSteamID[64], szIP[64], szQuery[1024];
-			
-			String_GetRandom(uniqID, sizeof(uniqID), 32, "23456789abcdefg");
-			GetClientAuthId(target, AuthId_Engine, szSteamID, sizeof(szSteamID), false);
-			GetClientIP(client, szIP, sizeof(szIP));
-			
-			Handle DB = rp_GetDatabase();
-			
-			Format(szQuery, sizeof(szQuery), "INSERT INTO `rp_tribunal` (`uniqID`, `timestamp`, `steamid`, `IP`) VALUES ('%s', '%i', '%s', '%s');", uniqID, GetTime(), szSteamID, szIP);
-			PrintToServer("LOCK-4");
-			SQL_LockDatabase(DB);
-			SQL_Query(DB, szQuery);
-			SQL_UnlockDatabase(DB);
-			PrintToServer("UNLOCK-4");
-			char szTitle[128], szURL[512];
-			Format(szTitle, sizeof(szTitle), "Tribunal: %N", target);
-			Format(szURL, sizeof(szURL), "https://www.ts-x.eu/popup.php?url=/index.php?page=tribunal&action=case&steamid=%s&tokken=%s", szSteamID, uniqID);
-			
-			AdvMOTD_ShowMOTDPanel(client, szTitle, szURL, MOTDPANEL_TYPE_URL);
-			return;
-		}		
-	}
-	else if (p_oAction == MenuAction_End) {
-		CloseHandle(p_hItemMenu);
 	}
 }
 // ----------------------------------------------------------------------------
@@ -1623,10 +761,7 @@ void SendPlayerToJail(int target, int client = 0) {
 	rp_ClientGiveItem(client, 2, -rp_GetClientItem(client, 2));
 	rp_ClientGiveItem(client, 3, -rp_GetClientItem(client, 3));
 	
-	int MaxJail = 0;	
-	float MinHull[3], MaxHull[3];
-	GetEntPropVector(target, Prop_Send, "m_vecMins", MinHull);
-	GetEntPropVector(target, Prop_Send, "m_vecMaxs", MaxHull);
+	int MaxJail = 0;
 	
 	for( int i=0; i<MAX_LOCATIONS; i++ ) {
 		rp_GetLocationData(i, location_type_base, tmp, sizeof(tmp));
@@ -1664,6 +799,8 @@ void SendPlayerToJail(int target, int client = 0) {
 		
 	}
 	
+	
+	
 	int rand = Math_GetRandomInt(0, (MaxJail-1));
 	rp_ClientTeleport(target, fLocation[rand]);
 	
@@ -1688,7 +825,7 @@ void AskJailTime(int client, int target) {
 	#endif
 	char tmp[256], tmp2[12];
 	
-	GetClientAuthId(target, AuthId_Engine, g_szTribunal_DATA[client][tribunal_steamid], sizeof(g_szTribunal_DATA[][]), false);
+	GetClientAuthId(target, AuthId_Engine, g_szTribunal[client], sizeof(g_szTribunal[]), false);
 
 	Handle menu = CreateMenu(eventSetJailTime);
 	Format(tmp, 255, "Combien de temps doit rester %N?\n ", target);	
@@ -1704,9 +841,11 @@ void AskJailTime(int client, int target) {
 		AddMenuItem(menu, tmp, "Jail Tribunal N°2");
 	}
 	
-	if(rp_GetClientInt(target, i_JailTime) <= 6*60){
+	if(rp_GetClientInt(target, i_JailTime) <= 6*60) {
 		for(int i=0; i<sizeof(g_szJailRaison); i++) {
-
+			
+			if( rp_GetClientJobID(client) == 101 && StringToInt(g_szJailRaison[i][jail_simple]) == 0 && rp_GetClientBool(target, b_IsSearchByTribunal) == false )
+				continue;
 			Format(tmp2, sizeof(tmp2), "%d_%d", target, i);
 			AddMenuItem(menu, tmp2, g_szJailRaison[i][jail_raison]);
 		}
@@ -1787,10 +926,10 @@ public int eventSetJailTime(Handle menu, MenuAction action, int client, int para
 			
 			LogToGame("[TSX-RP] [JAIL] [LIBERATION] %L a liberé %L", client, target);
 			
-			int zone = rp_GetZoneFromPoint(g_flLastPos[target]);
-			int bit = rp_GetZoneBit(zone);
+			int zonec = rp_GetZoneFromPoint(g_flLastPos[target]);
+			int bit = rp_GetZoneBit(zonec);
 			
-			if( bit & (BITZONE_JAIL|BITZONE_HAUTESECU|BITZONE_LACOURS) || rp_GetZoneInt(zone, zone_type_type) == 101 ) {
+			if( bit & (BITZONE_JAIL|BITZONE_HAUTESECU|BITZONE_LACOURS) || rp_GetZoneInt(zonec, zone_type_type) == 101 ) {
 				rp_ClientSendToSpawn(target, true);
 			}
 			else {
@@ -1803,24 +942,20 @@ public int eventSetJailTime(Handle menu, MenuAction action, int client, int para
 		if( type == -2 || type == -3 ) {
 			
 			if( type == -3 )
-				TeleportEntity(target, view_as<float>({-966.1, -570.6, -2007.9}), NULL_VECTOR, NULL_VECTOR);
+				rp_ClientTeleport(target, view_as<float>({-966.1, -570.6, -2007.9}));
 			else
-				TeleportEntity(target, view_as<float>({473.7, -1979.5, -2007.9}), NULL_VECTOR, NULL_VECTOR);
+				rp_ClientTeleport(target, view_as<float>({473.7, -1979.5, -2007.9}));
 			
 			CPrintToChat(target, "{lightblue}[TSX-RP]{default} Vous avez été mis en prison, en attente de jugement par: %N", client);
 			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez mis: %N {default}dans la prison du Tribunal.", target);
-			
-			if( rp_GetClientInt(target, i_JailTime) <= 360 )
-				rp_SetClientInt(target, i_JailTime, 360);
-			
+				
 			LogToGame("[TSX-RP] [TRIBUNAL] %L a mis %L dans la prison du Tribunal.", client, target);
 			return;
 		}
 		
 		
 		
-		if( StrEqual(g_szJailRaison[type][jail_raison],"Agression physique")
-			&& ! ((rp_GetClientInt(client, i_Job) >= 101 && rp_GetClientInt(client, i_Job) <= 106) && rp_GetZoneInt(rp_GetPlayerZone(client), zone_type_type) == 101) ) { // Agression physique
+		if( StrEqual(g_szJailRaison[type][jail_raison],"Agression physique") ) { // Agression physique
 			if(rp_GetClientInt(target, i_LastAgression)+30 < GetTime()){
 				rp_SetClientInt(target, i_JailTime, 0);
 				rp_SetClientInt(target, i_jailTime_Last, 0);
@@ -1831,13 +966,12 @@ public int eventSetJailTime(Handle menu, MenuAction action, int client, int para
 				
 				LogToGame("[TSX-RP] [JAIL] %L a été libéré car il n'avait pas commis d'agression", target);
 				
-				rp_ClientResetSkin(target);
 				rp_ClientTeleport(target, g_flLastPos[target]);
+				rp_ClientResetSkin(target);
 				return;
 			}
 		}
-		if( StrEqual(g_szJailRaison[type][jail_raison], "Tir dans la rue") 
-			&& ! ((rp_GetClientInt(client, i_Job) >= 101 && rp_GetClientInt(client, i_Job) <= 106) && rp_GetZoneInt(rp_GetPlayerZone(client), zone_type_type) == 101) ) { // Tir dans la rue
+		if( StrEqual(g_szJailRaison[type][jail_raison], "Tir dans la rue") ) { // Tir dans la rue
 			if(rp_GetClientInt(target, i_LastDangerousShot)+30 < GetTime()){
 				rp_SetClientInt(target, i_JailTime, 0);
 				rp_SetClientInt(target, i_jailTime_Last, 0);
@@ -1848,8 +982,8 @@ public int eventSetJailTime(Handle menu, MenuAction action, int client, int para
 				
 				LogToGame("[TSX-RP] [JAIL] %L a été libéré car il n'avait pas effectué de tir dangereux", target);
 				
-				rp_ClientResetSkin(target);
 				rp_ClientTeleport(target, g_flLastPos[target]);
+				rp_ClientResetSkin(target);
 				return;
 			}
 		}
@@ -1884,8 +1018,8 @@ public int eventSetJailTime(Handle menu, MenuAction action, int client, int para
 			}
 			if( IsValidClient( rp_GetClientInt(target, i_LastVolTarget) ) ) {
 				int tg = rp_GetClientInt(target, i_LastVolTarget);
-				rp_SetClientInt(tg, i_Money, rp_GetClientInt(tg, i_Money) + rp_GetClientInt(target, i_LastVolAmount));
-				rp_SetClientInt(target, i_AddToPay, rp_GetClientInt(target, i_AddToPay) - rp_GetClientInt(target, i_LastVolAmount));
+				rp_ClientMoney(tg, i_Money, rp_GetClientInt(target, i_LastVolAmount));
+				rp_ClientMoney(target, i_AddToPay, -rp_GetClientInt(target, i_LastVolAmount));
 				
 				CPrintToChat(target, "{lightblue}[TSX-RP]{default} Vous avez remboursé votre victime de %d$.", rp_GetClientInt(target, i_LastVolAmount));
 				CPrintToChat(tg, "{lightblue}[TSX-RP]{default} Le voleur a été mis en prison. Vous avez été remboursé de %d$.", rp_GetClientInt(target, i_LastVolAmount));
@@ -1893,6 +1027,8 @@ public int eventSetJailTime(Handle menu, MenuAction action, int client, int para
 			else{
 				amende += rp_GetClientInt(target, i_LastVolAmount); // Cas tentative de vol ou distrib...
 			}
+			
+			CancelClientMenu(target, true);
 		}
 		else {
 			amendeCalculation(target, amende);
@@ -1902,14 +1038,14 @@ public int eventSetJailTime(Handle menu, MenuAction action, int client, int para
 			(rp_GetClientInt(target, i_Money)+rp_GetClientInt(target, i_Bank)) >= amende*250 && amende <= 2500) ) {
 			
 			rp_SetClientStat(target, i_MoneySpent_Fines, rp_GetClientStat(target, i_MoneySpent_Fines) + amende);
-			rp_SetClientInt(target, i_Money, rp_GetClientInt(target, i_Money) - amende);
+			rp_ClientMoney(target, i_Money, -amende);
 			
 			if( rp_GetClientBool(client, b_GameModePassive) ) {
-				rp_SetClientInt(client, i_AddToPay, rp_GetClientInt(client, i_AddToPay) + (amende / 4));
+				rp_ClientMoney(client, i_AddToPay, amende / 4);
 				rp_SetJobCapital(jobID, rp_GetJobCapital(jobID) + (amende/4 * 3));
 			}
 			else {
-				rp_SetClientInt(client, i_AddToPay, rp_GetClientInt(client, i_AddToPay) + (amende / 2));
+				rp_ClientMoney(client, i_AddToPay, amende / 2);
 				rp_SetJobCapital(jobID, rp_GetJobCapital(jobID) + (amende / 2));
 			}
 			
@@ -1988,7 +1124,7 @@ public int eventSetJailTime(Handle menu, MenuAction action, int client, int para
 			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Le joueur s'est déconnecté mais il fera %.1f heures de prison", time_to_spend / 60.0);
 			
 			Format(szQuery, sizeof(szQuery), "INSERT INTO `rp_users2` (`id`, `steamid`, `jail` ) VALUES", szQuery);
-			Format(szQuery, sizeof(szQuery), "%s (NULL, '%s', '%i' );", szQuery, g_szTribunal_DATA[client][tribunal_steamid], time_to_spend );
+			Format(szQuery, sizeof(szQuery), "%s (NULL, '%s', '%i' );", szQuery, g_szTribunal[client], time_to_spend );
 			
 			SQL_TQuery(rp_GetDatabase(), SQL_QueryCallBack, szQuery);			
 		}
@@ -2049,8 +1185,8 @@ public int eventPayForLeaving(Handle menu, MenuAction action, int client, int pa
 		
 		int time_to_spend = 0;
 		rp_SetClientStat(client, i_MoneySpent_Fines, rp_GetClientStat(client, i_MoneySpent_Fines) + amende);
-		rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money) - amende);
-		rp_SetClientInt(target, i_AddToPay, rp_GetClientInt(target, i_AddToPay) + (amende / 4));
+		rp_ClientMoney(client, i_Money, -amende);
+		rp_ClientMoney(target, i_AddToPay, (amende / 4));
 		rp_SetJobCapital(jobID, rp_GetJobCapital(jobID) + (amende/4 * 3));
 			
 		GetClientAuthId(client, AuthId_Engine, options, sizeof(options), false);
@@ -2232,7 +1368,7 @@ int BuildingBarriere(int client) {
 		
 		GetEdictClassname(i, tmp, sizeof(tmp));
 		
-		if( StrEqual(classname, tmp) ) {
+		if( StrEqual(classname, tmp) && rp_GetBuildingData(i, BD_owner) == client ) {
 			count++;
 			if( count >= max ) {
 				CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez posé trop de barrières.");
@@ -2313,44 +1449,10 @@ public Action Cmd_ItemRatio(int args) {
 		GetClientAuthId(client, AuthId_Engine, steamid, sizeof(steamid), false);
 		displayTribunal(client, steamid);
 	}
-	else if( StrEqual(arg1, "target") ) {
-		if( rp_GetClientJobID(client) != 1 && rp_GetClientJobID(client) != 101 ) {
-			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Cet objet est réservé aux forces de l'ordre.");
-			return;
-		}
-		CreateTimer(0.25, task_RatioTarget, client);
-	}
 	else if( StrEqual(arg1, "gps") ) {
 		rp_ClientGiveItem(client, ITEM_GPS);
 		CreateTimer(0.25, task_GPS, client);
 	}
-}
-public Action task_RatioTarget(Handle timer, any client) {
-	#if defined DEBUG
-	PrintToServer("task_RatioTarget");
-	#endif
-	
-	Handle menu = CreateMenu(MenuTribunal_selectplayer);
-	SetMenuTitle(menu, "  Tribunal - Stats joueur\n ");
-	char tmp[255], tmp2[255], szSteam[32];
-	
-	for(int i = 1; i <= MaxClients; i++) {
-		if( !IsValidClient(i) )
-			continue;
-		
-		if( Entity_GetDistance(client, i) > MAX_AREA_DIST.0 )
-			continue;
-		
-		GetClientAuthId(i, AuthId_Engine, szSteam, sizeof(szSteam), false);
-		
-		Format(tmp, sizeof(tmp), "stats %s", szSteam);
-		
-		Format(tmp2, sizeof(tmp2), "%N - %s", i, szSteam);
-		AddMenuItem(menu, tmp, tmp2);
-	}
-	
-	SetMenuExitButton(menu, true);
-	DisplayMenu(menu, client, MENU_TIME_DURATION);
 }
 public Action task_GPS(Handle timer, any client) {
 	#if defined DEBUG
@@ -2590,7 +1692,7 @@ public Action fwdOnPlayerUse(int client) {
 	
 	GetClientAbsOrigin(client, vecOrigin);
 	
-	if( GetVectorDistance(vecOrigin, view_as<float>({ 2550.8, 1663.1, -2015.96 })) < 40.0 ) {
+	if( GetVectorDistance(vecOrigin, ARMU_POLICE) < 40.0 ) {
 		Cmd_BuyWeapon(client, false);
 	}
 	return Plugin_Continue;
@@ -2664,7 +1766,7 @@ public int Menu_BuyWeapon(Handle p_hMenu, MenuAction p_oAction, int client, int 
 			float vecOrigin[3];
 			GetClientAbsOrigin(client, vecOrigin);
 			
-			if( GetVectorDistance(vecOrigin, view_as<float>({ 2550.8, 1663.1, -2015.96 })) > 40.0 )
+			if( GetVectorDistance(vecOrigin, ARMU_POLICE) > 40.0 )
 				return 0;
 			
 			if( StringToInt(buffer[1]) == 1 ) {
@@ -2688,7 +1790,7 @@ public int Menu_BuyWeapon(Handle p_hMenu, MenuAction p_oAction, int client, int 
 			}
 			
 			rp_WeaponMenu_Delete(g_hBuyMenu, position);
-			rp_SetClientInt(client, i_Bank, rp_GetClientInt(client, i_Bank) - data[BM_Prix]);
+			rp_ClientMoney(client, i_Money, -data[BM_Prix]);
 			
 			int rnd = rp_GetRandomCapital(1);			
 			rp_SetJobCapital(1, RoundFloat(float(rp_GetJobCapital(1)) + float(data[BM_Prix]) * 0.75));

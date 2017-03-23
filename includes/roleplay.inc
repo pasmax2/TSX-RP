@@ -83,37 +83,39 @@ enum rp_event {
 	RP_OnClientTazedItem,		/* Lorsqu'un joueur taze quelque chose */
 	RP_OnBlackMarket,			/* Lorsqu'un joueur achète quelque chose au marché noire */
 	
+	RP_OnJugementOver,			/* Lorsqu'un jugement est prononcé */
+	
 	RP_EventMax
 }
 typeset rp_event_enum {
-	function Action(int victim, int attacker, float& damage); 			                   /* RP_PreTakeDamage  == return Plugin_Handled = aucun dégat */
-	function Action(int victim, int attacker, float& damage, int wepID, float pos[3]); /* RP_PostTakeDamageWeapon */
-	function Action(int victim, int attacker, float& damage);                          /* RP_PostTakeDamageKnife */
+	function Action(int victim, int attacker, float& damage); 			                   	/* RP_PreTakeDamage  == return Plugin_Handled = aucun dégat */
+	function Action(int victim, int attacker, float& damage, int wepID, float pos[3]); 		/* RP_PostTakeDamageWeapon */
+	function Action(int victim, int attacker, float& damage);                          		/* RP_PostTakeDamageKnife */
 
-	function Action(int attacker, int victim, float& damage);                          /* RP_PreGiveDamage  == return Plugin_Handled = aucun dégat */
-	function Action(int attacker, int victim, float& damage, int wepID, float pos[3]); /* RP_PostGiveDamageWeapon */
-	function Action(int attacker, int victim, float& damage); 	                    	 /* RP_PostGiveDamageKnife */
+	function Action(int attacker, int victim, float& damage);                          		/* RP_PreGiveDamage  == return Plugin_Handled = aucun dégat */
+	function Action(int attacker, int victim, float& damage, int wepID, float pos[3]); 		/* RP_PostGiveDamageWeapon */
+	function Action(int attacker, int victim, float& damage); 	                    	 	/* RP_PostGiveDamageKnife */
 
-	function Action(int client, float& speed, float& gravity); 	                       /* RP_PrePlayerPhysic == return Plugin_Stop pour forcer les valeurs et ignorer les autres plugins/hook*/
-	function Action(int client, float& speed, float& gravity); 	                       /* RP_PostPlayerPhysic */
+	function Action(int client, float& speed, float& gravity); 	                       		/* RP_PrePlayerPhysic == return Plugin_Stop pour forcer les valeurs et ignorer les autres plugins/hook*/
+	function Action(int client, float& speed, float& gravity); 	                       		/* RP_PostPlayerPhysic */
 	
-	function Action(int attacker, int victim);											/* RP_PlayerCanKill */
+	function Action(int attacker, int victim);												/* RP_PlayerCanKill */
 	
-	function Action(int client, int color[4]); 					                               /* RP_PreHUDColorize == idem */
-	function Action(int client);								                                       /* RP_OnFrameSeconde */
-	function Action(int client, int& amount);						                               /* RP_OnAssurance */
-	function Action(int client);							        	                               /* RP_OnPlayerSpawn */
-	function Action(int victim, int attacker, float& respawn);	                       /* RP_OnPlayerDead == return Plugin_Handled = cacher des logs */
-	function Action(int attacker, int victim, char weapon[64]);	                       /* RP_OnPlayerKill == return Plugin_Handled = cacher des logs */
+	function Action(int client, int color[4]); 					                            /* RP_PreHUDColorize == idem */
+	function Action(int client);								                            /* RP_OnFrameSeconde */
+	function Action(int client, int& amount);						                        /* RP_OnAssurance */
+	function Action(int client);							        	                    /* RP_OnPlayerSpawn */
+	function Action(int victim, int attacker, float& respawn);	                       		/* RP_OnPlayerDead == return Plugin_Handled = cacher des logs */
+	function Action(int attacker, int victim, char weapon[64]);	                       		/* RP_OnPlayerKill == return Plugin_Handled = cacher des logs */
 	
-	function Action(int client, float& cooldown);					                             /* RP_OnPlayerBuild */
-	function Action(int client);								                                       /* RP_OnPlayerUse */
-	function Action(int client, char[] command, char[] arg);		                       /* RP_OnPlayerCommand */
-	function Action(int client, int target, float& cooldown);		                       /* RP_OnPlayerSteal */
-	function Action(int client, int newZoneID, int oldZoneID);	                       /* RP_OnPlayerZoneChange */
-	function Action(int client, int target, float& dist);				                       /* RP_OnPlayerHear Est-ce que client peut entendre target ? */
-	function Action(int client, char[] message, int length, bool local);	             /* RP_PrePlayerTalk */
-	function Action(int client);								                                       /* RP_OnPlayerDataLoaded */
+	function Action(int client, float& cooldown);					                        /* RP_OnPlayerBuild */
+	function Action(int client);								                            /* RP_OnPlayerUse */
+	function Action(int client, char[] command, char[] arg);		                       	/* RP_OnPlayerCommand */
+	function Action(int client, int target, float& cooldown);		                       	/* RP_OnPlayerSteal */
+	function Action(int client, int newZoneID, int oldZoneID);	                       		/* RP_OnPlayerZoneChange */
+	function Action(int client, int target, float& dist);				                    /* RP_OnPlayerHear Est-ce que client peut entendre target ? */
+	function Action(int client, char[] message, int length, bool local);	             	/* RP_PrePlayerTalk */
+	function Action(int client);								                            /* RP_OnPlayerDataLoaded */
 	function Action(int client, int money);					                         	    /* RP_OnPlayerSell */
 	function Action(int client, char[] szHUD, const int maxSize);			                /* RP_OnPlayerHUD */
 	function Action(int client, int target);			             						/* RP_OnPlayerHINT */
@@ -131,6 +133,7 @@ typeset rp_event_enum {
 	function Action(int target, int client);												/* RP_PostClientSendToJail */
 	function Action(int client, int reward);												/* RP_OnClientTazedItem */
 	function Action(int client, int jobID, int target, int victim, int& prix, int arg);		/* RP_OnBlackMarket */
+	function Action(int client, int data[6], int charges[28]);								/* RP_OnJugementOver */
 };
 /**
  * Hook un évenement d'un joueur
@@ -444,6 +447,7 @@ native void rp_SetClientKeyAppartement(int client, int appartID, bool status=fal
  */
 native bool rp_GetClientKeyAppartement(int client, int appartID);
 // ----------------------------------------------------------------------------
+native void rp_ClientForceRelease(int client);
 native void rp_Effect_PropExplode(int entityID, bool tazer = false);					/* Explose un props, s'il est piégé */
 native void rp_Effect_Smoke(int client, float duration = 30.0);						/* Petit effect de fumée de cigarette */
 native void rp_Effect_VisionTrouble(int client, float duration = 30.0);					/* Trouble la vision d'un joueur */
@@ -556,6 +560,7 @@ native bool rp_ClientFloodTriggered(int client, int target, fd_user_data type);
 native void rp_ClientAggroIncrement(int client, int target, int damage);
 native void rp_ClientOverlays(int client, overlaysImg img, float duration = -1.0);
 native void rp_ClientXPIncrement(int client, int xp=1);
+native void rp_ClientMoney(int client, int_user_data type, int amount);
 // ----------------------------------------------------------------------------
 typedef NextMessageCallback = function void(int client, any data, char[] message);
 native void rp_GetClientNextMessage(int client, any data, NextMessageCallback cb);
@@ -676,6 +681,7 @@ enum bool_user_data {
 	b_isFemale,
 	b_ShouldGoToMairie,
 	b_PassedRulesTest,
+	b_AssuranceVie,
 	b_udata_max
 };
 enum int_user_data {
@@ -777,6 +783,11 @@ enum int_user_data {
 	
 	i_BirthDay,
 	i_BirthMonth,
+	
+	i_SearchLVL,
+	i_GiveXP,
+	i_Dette,
+	i_ContratType,
 	
 	i_udata_max
 };
@@ -974,6 +985,7 @@ enum rp_serv {
 	villaOwnerName,
 	lotoCagnotte,
 	mairieID,
+	annonceID,
 
 	rp_serv_max
 };

@@ -13,7 +13,7 @@
 #endif
 #define _rp_const_included_
 
-#define __LAST_REV__			"6.5 - Phoénix"
+#define __LAST_REV__			"6.6 - Phoénix"
 
 //#define DEBUG
 #define MAX_LOCATIONS			150
@@ -82,9 +82,9 @@
 #define ITEM_CHEQUE			304
 
 // Zone:
-#define	METRO_PAIX		80
-#define METRO_STATION	81
-#define METRO_INNO		82
+#define	METRO_PAIX		60
+#define METRO_STATION	61
+#define METRO_INNO		62
 #define ZONE_HALLDEALER	95
 #define	ZONE_VILLA2		156
 #define	ZONE_CABINE 	173
@@ -92,6 +92,14 @@
 #define	ZONE_BUNKER		194
 #define METRO_BELMON	242
 #define ZONE_VILLA		245
+
+#define TRIBUJAIL_1	287
+#define TRIBUJAIL_2	288
+#define TRIBUNAL_1	289
+#define TRIBUNAL_2	290
+#define BUREAU_1   	291
+#define BUREAU_2	292
+#define JURRY_2		293
 
 // PvP:
 #define	FLAG_SPEED		280.0

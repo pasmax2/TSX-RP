@@ -183,7 +183,7 @@ public void Q3_End(int objectiveID, int client) {
 	
 	int cap = rp_GetRandomCapital(181);
 	rp_SetJobCapital(cap, rp_GetJobCapital(cap) - 2500);
-	rp_SetClientInt(client, i_AddToPay, rp_GetClientInt(client, i_AddToPay) + 2500);
+	rp_ClientMoney(client, i_AddToPay, 2500);
 	rp_ClientXPIncrement(client, 1250);
 	
 	Menu menu = new Menu(MenuNothing);
@@ -196,7 +196,7 @@ public void Q3_End(int objectiveID, int client) {
 	menu.ExitButton = false;
 	menu.Display(client, 30);
 	
-	char item[64]; rp_GetItemData(64, item_type_name, item, sizeof(item)); rp_ClientGiveItem(client, 236); // [PvP] AK-47
+	char item[64]; rp_GetItemData(236, item_type_name, item, sizeof(item)); rp_ClientGiveItem(client, 236); // [PvP] AK-47
 	CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez reçu: %s", item);
 }
 public void Q1_Abort(int objectiveID, int client) {

@@ -103,8 +103,8 @@ public Action Cmd_ItemDoorProtect(int args) {
 		float reduc = prix / 100.0 * float(rp_GetClientInt(vendeur, i_Reduction));
 		float taxe = rp_GetItemFloat(item_id, item_type_taxes);
 		
-		rp_SetClientInt(vendeur, i_AddToPay, rp_GetClientInt(vendeur, i_AddToPay) - RoundFloat((prix * taxe) - reduc));
-		rp_SetClientInt(client, i_Bank, rp_GetClientInt(client, i_Bank) + RoundFloat(prix - reduc));
+		rp_ClientMoney(vendeur, i_AddToPay, -RoundFloat((prix * taxe) - reduc));
+		rp_ClientMoney(client, i_Bank, RoundFloat(prix - reduc));
 		rp_SetJobCapital(91, rp_GetJobCapital(91) - RoundFloat(prix * (1.0 - taxe)));
 		
 		rp_SetClientStat(vendeur, i_MoneyEarned_Sales, rp_GetClientStat(vendeur, i_MoneyEarned_Sales) - RoundFloat((prix * taxe) - reduc));
@@ -268,8 +268,8 @@ public Action fwdOnPlayerSteal(int client, int target, float& cooldown) {
 			amount = money;
 			
 		rp_SetClientStat(target, i_MoneySpent_Stolen, rp_GetClientStat(target, i_MoneySpent_Stolen) + amount);
-		rp_SetClientInt(client, i_AddToPay, rp_GetClientInt(client, i_AddToPay) + amount);
-		rp_SetClientInt(target, i_Money, rp_GetClientInt(target, i_Money) - amount);
+		rp_ClientMoney(client, i_AddToPay, amount);
+		rp_ClientMoney(target, i_Money, -amount);
 		rp_SetClientInt(client, i_LastVolTime, GetTime());
 		rp_SetClientInt(client, i_LastVolAmount, amount);
 		rp_SetClientInt(client, i_LastVolTarget, target);
@@ -504,7 +504,7 @@ public Action ItemPiedBiche_frame(Handle timer, Handle dp) {
 				
 				int owner = rp_GetBuildingData(target, BD_owner);
 				if( IsValidClient(owner) ) {
-					rp_SetClientInt(owner, i_Bank, rp_GetClientInt(owner, i_Bank) - 25);
+					rp_ClientMoney(owner, i_Bank, -25);
 					CPrintToChat(owner, "{lightblue}[TSX-RP]{default} Quelqu'un vol vos faux billets.");
 				}
 			}
@@ -516,7 +516,7 @@ public Action ItemPiedBiche_frame(Handle timer, Handle dp) {
 				
 				int owner = rp_GetBuildingData(target, BD_owner);
 				if( IsValidClient(owner) ) {
-					rp_SetClientInt(owner, i_Bank, rp_GetClientInt(owner, i_Bank) - (25 * 15));
+					rp_ClientMoney(owner, i_Bank, -25 * 15);
 					CPrintToChat(owner, "{lightblue}[TSX-RP]{default} Quelqu'un vol vos faux billets.");
 				}
 				
@@ -708,10 +708,11 @@ public Action ItemPickLockOver_frame(Handle timer, Handle dp) {
 	}
 	
 	int difficulte = 1;
+	int tzone = rp_GetPlayerZone(door);
 	
-	if( rp_IsInPVP(client) )
+	if( rp_IsInPVP(client) || rp_GetZoneInt(tzone, zone_type_type) == 101 )
 		difficulte += 1;
-	if( rp_GetZoneBit( rp_GetPlayerZone(door)) & BITZONE_HAUTESECU )
+	if( rp_GetZoneBit( tzone ) & BITZONE_HAUTESECU || rp_GetZoneInt(tzone, zone_type_type) == 101 )
 		difficulte += 1;
 	if( g_iDoorDefine_LOCKER[doorID] )
 		difficulte += 2;
@@ -910,6 +911,7 @@ void MENU_ShowPickLock(int client, float percent, int difficulte, int type) {
 		case 2: AddMenuItem(menu, ".", "Difficulté: Moyenne", ITEMDRAW_DISABLED);
 		case 3: AddMenuItem(menu, ".", "Difficulté: Difficile", ITEMDRAW_DISABLED);
 		case 4: AddMenuItem(menu, ".", "Difficulté: Très difficile", ITEMDRAW_DISABLED);
+		case 5: AddMenuItem(menu, ".", "Difficulté: Impossible", ITEMDRAW_DISABLED);
 	}
 	
 	Format(tmp, sizeof(tmp), "Policier proche: %d", rp_CountPoliceNear(client));
@@ -1164,7 +1166,7 @@ public int Menu_BuyWeapon(Handle p_hMenu, MenuAction p_oAction, int client, int 
 			
 			
 			deleteBuyMenu(position);
-			rp_SetClientInt(client, i_Bank, rp_GetClientInt(client, i_Bank) - data[IM_Prix]);
+			rp_ClientMoney(client, i_Money, -data[IM_Prix]);
 			rp_ClientGiveItem(client, data[IM_ItemID]);
 			rp_GetItemData(data[IM_ItemID], item_type_name, tmp, sizeof(tmp));
 			
@@ -1186,7 +1188,7 @@ public int Menu_BuyWeapon(Handle p_hMenu, MenuAction p_oAction, int client, int 
 			}
 			else if( IsValidClient(data[IM_Owner]) && rp_GetClientJobID(data[IM_Owner]) == 91 && data[IM_Prix] > 0 ) {
 				rp_SetJobCapital(91, rp_GetJobCapital(91) + RoundToCeil(float(data[IM_Prix]) * 0.5));
-				rp_SetClientInt(data[IM_Owner], i_AddToPay, rp_GetClientInt(data[IM_Owner], i_AddToPay) + RoundToFloor(float(data[IM_Prix]) * 0.5));
+				rp_ClientMoney(data[IM_Owner], i_AddToPay, RoundToFloor(float(data[IM_Prix]) * 0.5));
 				
 				CPrintToChat(data[IM_Owner], "{lightblue}[TSX-RP]{default} Vous avez vendu 1 %s à %N au marché noir pour %d$", tmp, client, data[IM_Prix]);
 			}

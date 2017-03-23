@@ -20,7 +20,7 @@
 //#define	INSTANT
 
 #define getWheel(%1,%2,%3,%4) (g_iJoker[%1][%3] == %4 ? 6 : wheel[%2][%3][%4])
-#define wheelButton 330
+#define wheelButton 332
 
 
 public Plugin myinfo = {
@@ -44,18 +44,6 @@ int gain[10][7] =  {
 	{150,	30,		25,	20,	15,	10,	-1}, // 8
 	{15,	15,		15,	15,	15,	15,	-1}, // 9
 	{0,		0,		0,	0,	0,	25,	-1}  // 10
-};
-float rows[][][] = {
-	{{2505.0, -5624.0, -1962.0}, {2545.0, -5530.0, -1882.0}},
-	{{2505.0, -5528.0, -1962.0}, {2545.0, -5434.0, -1882.0}},
-	{{2505.0, -5428.0, -1962.0}, {2545.0, -5334.0, -1882.0}},
-	{{2505.0, -5324.0, -1962.0}, {2545.0, -5190.0, -1882.0}},
-	{{2353.0, -5620.0, -1962.0}, {2393.0, -5478.0, -1882.0}},
-	{{2353.0, -5468.0, -1962.0}, {2393.0, -5326.0, -1882.0}},
-	{{2249.0, -5468.0, -1962.0}, {2289.0, -5326.0, -1882.0}},
-	{{2249.0, -5620.0, -1962.0}, {2289.0, -5478.0, -1882.0}},
-	{{1788.0, -5359.0, -1962.0}, {1938.0, -5309.0, -1882.0}},
-	{{1938.0, -5359.0, -1962.0}, {2028.0, -5309.0, -1882.0}}
 };
 int lstJOB[] =  { 11, 21, 31, 41, 51, 61, 71, 81, 111, 131, 171, 191, 211, 221 };
 int g_iLastMachine[65], g_iRotation[65][2][3], g_iJettonInMachine[65], g_iJoker[65][3];
@@ -99,8 +87,35 @@ public void OnPluginStart() {
 }
 public void OnMapStart() {
 	HookSingleEntityOutput(wheelButton, "OnPressed", wheelButtonPressed);
+	SDKHook(wheelButton, SDKHook_Touch, touch);
+	SDKHook(wheelButton+1, SDKHook_Touch, touch);
+	
 	PrecacheSound("common/talk.wav");
 	PrecacheSound("common/stuck1.wav");
+}
+public Action touch(int entity, int target) {
+	
+	if( IsValidClient(rp_IsGrabbed(target)) ) {
+		CPrintToChat(rp_IsGrabbed(target), "{lightblue}[TSX-RP]{default} Ne touchez pas la roue.");
+		rp_ClientDamage(rp_IsGrabbed(target), 50000, rp_IsGrabbed(target));
+	}
+		
+	if( IsValidClient(target) ) {
+		rp_ClientDamage(target, 5, target);
+		
+		float pos[3];
+		Entity_GetAbsOrigin(target, pos);
+		pos[0] -= 255.0;
+		pos[2] += 8.0;
+		
+		CPrintToChat(target, "{lightblue}[TSX-RP]{default} Ne touchez pas la roue.");
+		rp_ClientTeleport(target, pos);
+	
+	}
+	else if( rp_IsMoveAble(target) )
+		AcceptEntityInput(target, "Kill");
+	
+	return Plugin_Continue;
 }
 public Action wheelButtonPressed(const char[] output, int caller, int activator, float delay) {
 	
@@ -124,6 +139,7 @@ public Action wheelButtonPressed(const char[] output, int caller, int activator,
 	SetEntProp(caller, Prop_Data, "m_bLocked", 1);
 	canPlay = false;
 	takePlayerJeton(activator, 5);
+	rp_SetClientStat(activator, i_LotoSpent, rp_GetClientStat(activator, i_LotoSpent) + 5*100); // 5 jetons * prix du jeton
 	CreateTimer(0.25, wheelThink, activator);
 	return Plugin_Continue;
 }
@@ -153,19 +169,19 @@ public Action wheelThink(Handle timer, any client) {
 		
 		if( gain2[c] == 0 )
 			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez perdu un tour!");
-		else if( gain2[c] > 0 )
+		else if( gain2[c] > 0 ) {
 			CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez gagné %d$!", gain2[c]);
-		else
+			rp_SetClientStat(client, i_LotoWon, rp_GetClientStat(client, i_LotoWon) + (gain2[c]));
+		}
+		else {
 			CPrintToChat(client, "{lightblue}[TSX-RP]{default} BANKRUPT! Vous avez perdu %d$!", gain2[c]);
+			rp_SetClientStat(client, i_LotoSpent, rp_GetClientStat(client, i_LotoSpent) + gain2[c]);
+		}
 		
 		if( Math_Abs(gain2[c]) >= 5000 )
 			rp_ClientXPIncrement(client, 100);
-			
-		if( gain2[c] >= 0 )
-			rp_SetClientInt(client, i_AddToPay, rp_GetClientInt(client, i_AddToPay) + gain2[c]);
-		else
-			rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money) + gain2[c]);
 		
+		rp_ClientMoney(client, i_AddToPay, gain2[c]);
 		CreateTimer(1.0, allowPlay);
 	}
 	else {
@@ -198,7 +214,45 @@ public void SQL_GetJackpot(Handle owner, Handle hQuery, const char[] error, any 
 public void OnClientPostAdminCheck(int client) {
 	rp_HookEvent(client, RP_OnPlayerBuild, fwdOnPlayerBuild);
 	rp_HookEvent(client, RP_OnPlayerUse, fwdOnPlayerUse);
+	rp_HookEvent(client, RP_OnPlayerCommand, fwdCommand);
+}
+// ----------------------------------------------------------------------------
+public Action fwdCommand(int client, char[] command, char[] arg) {
+	if( StrEqual(command, "dé") ) {
+		return Cmd_de(client, arg);
+	}
+	return Plugin_Continue;
+}
+public Action Cmd_de(int client, char[] arg) {
 	
+	int count = StringToInt(arg);
+	if( count <= 0 )
+		count = 1;
+	if( count >= 5 )
+		count = 5;
+	
+	if( rp_GetClientFloat(client, fl_CoolDown) > GetGameTime() ) {
+		CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous ne pouvez rien utiliser pour encore %.2f seconde(s).", rp_GetClientFloat(client, fl_CoolDown)-GetGameTime() );
+		return Plugin_Handled;
+	}
+	
+	rp_SetClientFloat(client, fl_CoolDown, GetGameTime() + 2.0);
+	
+	char tmp[128];
+	int k, j;
+	
+	for (int i = 1; i <= count; i++) {
+		j = Math_GetRandomInt(1, 6);
+		k += j;
+		Format(tmp, sizeof(tmp), "%s{purple}%d{default}, ", tmp, j);
+	}
+	tmp[strlen(tmp) - 2] = 0;
+	
+	if( count == 1 )
+		PrintToChatClientArea(client, "%N lance un dé et fait {green}%d{default}!", client, k);
+	else
+		PrintToChatClientArea(client, "%N lance %d dé%s et fait %s ... soit un total de {green}%d{default}!", client, count, count>1 ? "s" : "", tmp, k);
+	return Plugin_Handled;
 }
 public Action fwdOnPlayerBuild(int client, float& cooldown) {
 	if( rp_GetClientJobID(client) != 171 )
@@ -222,18 +276,6 @@ public Action fwdOnPlayerUse(int client) {
 	if( rp_GetPlayerZone(client) == 278 ) {
 		displayCasino(client);
 	}
-}
-int IsPlayerInCasino(int client) {
-	float pos[3];
-	GetClientAbsOrigin(client, pos);
-	
-	for (int i = 0; i < sizeof(rows); i++) {
-		if(	pos[0] <= rows[i][1][0] && pos[1] <= rows[i][1][1] && pos[2] <= rows[i][1][2] &&
-			pos[0] >= rows[i][0][0] && pos[1] >= rows[i][0][1] && pos[2] >= rows[i][0][2] ) {
-				return i;
-		}
-	}
-	return -1;
 }
 public Action Cmd_ItemStuffPvP(int args) {
 	int client = GetCmdArgInt(1);
@@ -464,7 +506,7 @@ bool gratterTicket(int client, int amount, int itemID) {
 	if( Math_GetRandomInt(1, luck) == 42 && itemID ) {
 		
 		rp_SetClientStat(client, i_LotoWon, rp_GetClientStat(client, i_LotoWon) + (amount*100));
-		rp_SetClientInt(client, i_Bank, rp_GetClientInt(client, i_Bank) + (amount * 100));
+		rp_ClientMoney(client, i_Bank, amount * 100);
 		
 		rp_SetJobCapital(171, rp_GetJobCapital(171) - (amount*100));
 		
@@ -619,7 +661,7 @@ public Action Cmd_ShowSymbol(int client, int args) {
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 void displayCasino(int client) {
-	int n = IsPlayerInCasino(client);
+	int n = rp_PlayerIsInCasinoMachine(client);
 	if( n < 0 )
 		return;
 	
@@ -660,7 +702,7 @@ void displayCasino(int client) {
 void EffectCasino(int client, int jeton) {
 	if( g_bPlaying[client] )
 		return;
-	if( IsPlayerInCasino(client) < 0 )
+	if( rp_PlayerIsInCasinoMachine(client) < 0 )
 		return;
 	
 	if( !takePlayerJeton(client, jeton) ) {
@@ -752,6 +794,7 @@ void displayWheel(int client, int n, int l[3], int k[3], bool last) {
 	
 	if( last && won>0 ) {
 		givePlayerJeton(client, won);
+		rp_SetClientStat(client, i_LotoWon, rp_GetClientStat(client, i_LotoWon) + (won*100));
 		
 		if( (g_iJackpot-won) == 0 && won > 1000 ) {
 			LogToGame("[CASINO] %L a remporté un jackpot de %d$.", client, won);
@@ -939,6 +982,7 @@ bool takePlayerJeton(int client, int amount) {
 		rp_ClientGiveItem(client, ITEM_JETONROUGE, -rouge);
 		rp_ClientGiveItem(client, ITEM_JETONBLEU, -amount);
 	}
+	rp_SetClientStat(client, i_LotoSpent, rp_GetClientStat(client, i_LotoSpent) + amount*100);
 	return true;
 }
 void givePlayerJeton(int client, int amount) {
@@ -1013,7 +1057,7 @@ public int MenuTrade(Handle menu, MenuAction action, int client, int param2) {
 			rp_ClientGiveItem(client, ITEM_JETONBLEU, -jetons);
 			
 			if( jobID == 0 ) {
-				rp_SetClientInt(client, i_Money, rp_GetClientInt(client, i_Money) + itemID);
+				rp_ClientMoney(client, i_Bank, itemID);
 				CPrintToChat(client, "{lightblue}[TSX-RP]{default} Vous avez reçu: %d$!", itemID);
 			}
 			else {
